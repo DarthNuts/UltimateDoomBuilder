@@ -53,6 +53,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 			chatpanel.StopRequested += () => { if(chat != null && chat.Running) chat.Interrupt(); };
 			chatpanel.NewChatRequested += () => StartChat(null);
 			chatpanel.ResumeRequested += () => StartChat(ChatLastSession.Length > 0 ? ChatLastSession : null);
+			chatpanel.AttachRequested += AttachSelection;
+			chatpanel.GetRequested += () => Get();
 			chatpanel.PermissionAnswered += (id, allow, input) => { if(chat != null && chat.Running) chat.Answer(id, allow, input, null); };
 			menu.DropDownItems.Insert(0, new ToolStripMenuItem("Чат с Claude", null, (s, e) => ShowChat()));
 			menu.DropDownItems.Insert(1, new ToolStripSeparator());
@@ -148,6 +150,11 @@ namespace CodeImp.DoomBuilder.ZTProject
 		{
 			if(chat == null || !chat.Running) { chatpanel.Error("сеанс не запущен"); return; }
 			chatpanel.User(text);
+			if(chatpanel.SendFirst)
+			{
+				string sent = QuietSend();
+				if(sent != null) chatpanel.Note(sent);
+			}
 			try { chat.Send(text); chatpanel.SetStatus("Claude думает…", true, true); }
 			catch(Exception ex) { chatpanel.Error(ex.Message); }
 		}
@@ -199,9 +206,64 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 		#endregion
 
+		#region ================== Attachments and sending
+
+		// «Выделенное»: номера выделенных элементов карты (как в TEXTMAP) — подробности Claude возьмёт через MCP
+		private void AttachSelection()
+		{
+			if(General.Map == null) { chatpanel.Note("карта не открыта"); return; }
+			CodeImp.DoomBuilder.Map.MapSet m = General.Map.Map;
+			List<string> parts = new List<string>();
+			Func<string, IEnumerable<int>, string> fmt = (name, ids) =>
+			{
+				List<int> l = ids.ToList();
+				return l.Count == 0 ? null : name + " " + string.Join(", ", l.Take(60)) + (l.Count > 60 ? " … (всего " + l.Count + ")" : "");
+			};
+			foreach(string s in new[]
+			{
+				fmt("секторы", m.GetSelectedSectors(true).Select(x => x.Index)),
+				fmt("линии", m.GetSelectedLinedefs(true).Select(x => x.Index)),
+				fmt("вещи", m.GetSelectedThings(true).Select(x => x.Index)),
+				fmt("вершины", m.GetSelectedVertices(true).Select(x => x.Index))
+			}) if(s != null) parts.Add(s);
+			if(parts.Count == 0) { chatpanel.Note("на карте ничего не выделено"); return; }
+			chatpanel.InsertText("[в UDB выделено на " + General.Map.Options.CurrentName + " (revision " + McpTools.Revision + "): " + string.Join("; ", parts) + "]");
+		}
+
+		// Перед запросом: сохранить карту, закоммитить и отправить неотправленное (без окна комментария). null — нечего
+		private string QuietSend()
+		{
+			string dir = ProjectDir;
+			if(!ProjectMap.IsProjectDir(dir)) return null;
+			if(!SaveProjectMap()) return "карта не сохранена — правки не отправлены";
+			List<string> changes = Git.Lines(Git.Run(dir, "status", "--porcelain"));
+			if(changes.Count == 0) return null;
+			busy++;
+			try
+			{
+				Cursor.Current = Cursors.WaitCursor;
+				string branch = CurrentBranch(dir);
+				Git.Run(dir, "add", "-A");
+				GitResult c = Git.CommitWithMessage(dir, "UDB: " + SummaryLine(changes) + "\n\n" + Summarize(changes) +
+					"\n\nОтправлено перед запросом в чат Claude.\n");
+				if(!c.Ok) return "коммит не удался: " + c.Output.Split('\n')[0];
+				Push(dir, branch);
+				return "правки из UDB отправлены в " + branch + ": " + SummaryLine(changes);
+			}
+			finally
+			{
+				busy--;
+				SyncWatch();
+				Cursor.Current = Cursors.Default;
+			}
+		}
+
+		#endregion
+
 		#region ================== For MCP
 
 		internal ChatPanel ChatPanelForMcp { get { return chatpanel; } }
+		internal string AttachSelectionForMcp() { AttachSelection(); return chatpanel.InputText; }
 		internal ChatSession ChatForMcp { get { return chat; } }
 
 		#endregion

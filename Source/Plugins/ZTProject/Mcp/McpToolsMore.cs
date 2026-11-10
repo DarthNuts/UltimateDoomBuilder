@@ -141,6 +141,9 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 			Add("chat_send", "Чат Claude в UDB: отправить сообщение, как с клавиатуры панели.", Schema("text!", "string", "текст"), true, a =>
 				plug.ChatPanelForMcp.SendText(Str(a, "text")) ? ToolResult.Text("отправлено") : ToolResult.Error("сеанс не готов (не подключён или Claude думает)"));
 
+			Add("chat_attach", "Чат Claude в UDB: кнопка «Выделенное» — вставить в поле запроса номера выделенных элементов; ответ — текст поля.",
+			    Schema(), true, a => ToolResult.Text(plug.AttachSelectionForMcp()));
+
 			Add("chat_answer", "Чат Claude в UDB: ответить на запрос разрешения («Разрешить» / «Отклонить»).",
 			    Schema("allow!", "boolean", "разрешить"), true, a =>
 			{

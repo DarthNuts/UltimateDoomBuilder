@@ -18,7 +18,8 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 
 		private readonly RichTextBox log;
 		private readonly TextBox input;
-		private readonly Button send, stop, newchat, resume;
+		private readonly Button send, stop, newchat, resume, attach, getbtn;
+		private readonly CheckBox sendfirst;
 		private readonly Label status;
 		private readonly Panel permbar;
 		private readonly Label permtext;
@@ -27,11 +28,14 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 		private readonly StringBuilder transcript = new StringBuilder();     // для MCP chat_log
 
 		public event Action<string> SendRequested;
-		public event Action StopRequested, NewChatRequested, ResumeRequested;
+		public event Action StopRequested, NewChatRequested, ResumeRequested, AttachRequested, GetRequested;
 		public event Action<string, bool, Dictionary<string, object>> PermissionAnswered;
 
 		public string Transcript { get { return transcript.ToString(); } }
 		public bool PermissionPending { get { return permid != null; } }
+		// Перед запросом отправить неотправленные правки из UDB (Claude видит ровно текущее состояние)
+		public bool SendFirst { get { return sendfirst.Checked; } }
+		public string InputText { get { return input.Text; } }
 
 		#endregion
 
@@ -46,7 +50,8 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 			newchat = new Button { Text = "Новый чат", Width = 80 };
 			resume = new Button { Text = "Продолжить", Width = 85 };
 			stop = new Button { Text = "Стоп", Width = 50, Enabled = false };
-			top.Controls.AddRange(new Control[] { newchat, resume, stop });
+			getbtn = new Button { Text = "Получить", Width = 75 };
+			top.Controls.AddRange(new Control[] { newchat, resume, stop, getbtn });
 			status = new Label { Dock = DockStyle.Top, Height = 18, Padding = new Padding(4, 2, 4, 0), ForeColor = SystemColors.GrayText, Text = "не подключено" };
 
 			log = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None, BackColor = SystemColors.Window, DetectUrls = true, HideSelection = false };
@@ -61,6 +66,10 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 			permbar.Controls.Add(permtext);
 			permbar.Controls.Add(pbtn);
 
+			FlowLayoutPanel opts = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 28, Padding = new Padding(2), WrapContents = false };
+			attach = new Button { Text = "Выделенное", Width = 85 };
+			sendfirst = new CheckBox { Text = "Сначала отправить мои правки", Checked = true, AutoSize = true, Padding = new Padding(4, 4, 0, 0) };
+			opts.Controls.AddRange(new Control[] { attach, sendfirst });
 			Panel bottom = new Panel { Dock = DockStyle.Bottom, Height = 70, Padding = new Padding(2) };
 			input = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, AcceptsReturn = true };
 			send = new Button { Dock = DockStyle.Right, Text = "Отправить\n(Ctrl+Enter)", Width = 90, Enabled = false };
@@ -70,6 +79,7 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 			Controls.Add(log);
 			Controls.Add(permbar);
 			Controls.Add(bottom);
+			Controls.Add(opts);
 			Controls.Add(status);
 			Controls.Add(top);
 
@@ -78,6 +88,8 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 			stop.Click += (s, e) => { if(StopRequested != null) StopRequested(); };
 			newchat.Click += (s, e) => { if(NewChatRequested != null) NewChatRequested(); };
 			resume.Click += (s, e) => { if(ResumeRequested != null) ResumeRequested(); };
+			attach.Click += (s, e) => { if(AttachRequested != null) AttachRequested(); };
+			getbtn.Click += (s, e) => { if(GetRequested != null) GetRequested(); };
 		}
 
 		#endregion
@@ -147,6 +159,13 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 			if(text.Length == 0 || !send.Enabled) return;
 			input.Clear();
 			if(SendRequested != null) SendRequested(text);
+		}
+
+		// Вставить текст в поле запроса (вложение «Выделенное»)
+		public void InsertText(string text)
+		{
+			input.SelectedText = (input.TextLength > 0 && !input.Text.EndsWith(" ") ? " " : "") + text + " ";
+			input.Focus();
 		}
 
 		// Отправить текст как с клавиатуры (MCP chat_send)
