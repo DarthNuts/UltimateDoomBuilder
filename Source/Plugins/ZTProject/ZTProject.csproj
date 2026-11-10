@@ -51,6 +51,7 @@
     <Compile Include="Mcp\MapRender.cs" />
     <Compile Include="Mcp\McpServer.cs" />
     <Compile Include="Mcp\McpTools.cs" />
+    <Compile Include="Mcp\McpToolsMap.cs" />
     <Compile Include="Mcp\McpToolsMore.cs" />
     <Compile Include="Mcp\UiAutomation.cs" />
     <Compile Include="ProjectMap.cs" />

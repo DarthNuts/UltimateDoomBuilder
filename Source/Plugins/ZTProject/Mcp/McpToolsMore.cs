@@ -23,6 +23,8 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 
 		private void RegisterMore()
 		{
+			RegisterMap();
+
 			Add("config_catalog", "Справочник игровой конфигурации и ресурсов мода: спецы линий (номер, имя, аргументы), эффекты секторов, " +
 			    "типы вещей (номер, имя, класс актора — включая акторы мода из DECORATE/ZScript), флаги, UDMF-поля. Поиск по подстроке " +
 			    "имени/класса или по номеру.",

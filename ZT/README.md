@@ -112,7 +112,8 @@ UDB). Конфликт в других файлах (скрипты, `src/`) п�
   `script_read`, `scripts_compile` — скрипты карты и компиляция ACS с ошибками; `map_analysis` — Map Analysis UDB;
   `zt_get_build` — «Получить сборку»; `editor_open_file`, `editor_tabs`, `editor_text` — вкладки редактора скриптов
   (открыть файл проекта, прочитать и заменить текст, сохранить); `zt_check_scripts` — проверка скриптов мода в GZDoom; `zt_test_map` — тест карты в игре; `render_2d` — схема области карты в PNG с подсветкой и номерами (вид в UDB не
-  меняется);
+  меняется); `sector_at`, `element_info` (элемент с соседями), `list_polyobjects` (с мёртвыми), `list_portals`,
+  `check_script_refs` (вызовы несуществующих ACS-скриптов по имени и номеру);
   `ui_windows`, `ui_click`, `ui_select_rows`, `ui_set_text`, `screenshot` (окна UDB и MessageBox); `run_action`
   (действия UDB и плагина, например `ztproject_ztget` — «Получить»), `undo`/`redo`; `zt_set_project`, `zt_open_map`
   (без окна параметров — по `.dbs`), `zt_reload_map`. Правки и действия — только в режиме «Чтение и правка».
