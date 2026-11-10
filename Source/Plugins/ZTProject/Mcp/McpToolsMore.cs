@@ -102,6 +102,41 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				}
 			});
 
+			Add("render_2d", "Схема области карты в PNG: линии (белые — односторонние, серые — двусторонние, голубые — со спецом), вещи, " +
+			    "подсвеченные элементы с номерами (секторы залиты). Вид пользователя в UDB не меняется. Для отчётов и проверки разметки.",
+			    Schema("highlight", "object", "что подсветить: {\"sector\": [40], \"linedef\": [12, 13], \"thing\": [5]}",
+			           "rect", "number[]", "область [x1, y1, x2, y2]; по умолчанию — вокруг подсвеченного (иначе вся карта)",
+			           "margin", "number", "отступ вокруг подсвеченного, по умолчанию 512",
+			           "width", "integer", "ширина картинки, по умолчанию 1200",
+			           "labels", "boolean", "подписать номера подсвеченного (по умолчанию да)",
+			           "things", "boolean", "рисовать вещи (по умолчанию да)",
+			           "save_to", "string", "сохранить PNG в файл"), false, a =>
+			{
+				NeedMap();
+				Dictionary<string, List<int>> hl = new Dictionary<string, List<int>>();
+				Dictionary<string, object> h = Arg(a, "highlight") as Dictionary<string, object>;
+				if(h != null) foreach(KeyValuePair<string, object> kv in h) hl[kv.Key.ToLowerInvariant()] = Ints(h, kv.Key);
+				System.Collections.IEnumerable re = Arg(a, "rect") as System.Collections.IEnumerable;
+				double[] rect = re != null ? re.Cast<object>().Select(o => Convert.ToDouble(o, System.Globalization.CultureInfo.InvariantCulture)).ToArray() : null;
+				object mo = Arg(a, "margin");
+				double margin = mo != null ? Convert.ToDouble(mo, System.Globalization.CultureInfo.InvariantCulture) : 512;
+				byte[] png = MapRender.Render(hl, rect, margin, Int(a, "width", 1200), Bool(a, "labels", true), Bool(a, "things", true));
+				ToolResult r = new ToolResult();
+				string path = Str(a, "save_to");
+				if(!string.IsNullOrEmpty(path)) { System.IO.File.WriteAllBytes(path, png); r.Content.Add(ToolResult.TextItem("сохранено: " + path)); }
+				r.Content.Add(new Dictionary<string, object> { { "type", "image" }, { "mimeType", "image/png" }, { "data", Convert.ToBase64String(png) } });
+				return r;
+			});
+
+			Add("zt_test_map", "Плагин ZT: тест открытой карты в игре — GZDoom в порядке ZeroTolerance.bat, src/ вместо собранного pk3, " +
+			    "карта из UDB со скомпилированными скриптами. Игра открывается на экране пользователя. В ответе — лог GZDoom.",
+			    Schema(), true, a =>
+			{
+				string log;
+				string err = plug.TestMap(out log);
+				return err != null ? ToolResult.Error(err) : ToolResult.Json(new Dictionary<string, object> { { "started", true }, { "log", log } });
+			});
+
 			tools.Add(new Tool
 			{
 				Name = "map_analysis", OwnThread = true,

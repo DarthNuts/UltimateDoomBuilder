@@ -33,7 +33,9 @@
 - `config_catalog` (спецы, эффекты, типы вещей с акторами мода, флаги, UDMF-поля), `scripts_list`, `script_read`,
   `scripts_compile` (ACS с ошибками), `map_analysis` (Map Analysis UDB: режим анализа, выбор проверок, результаты с
   элементами — через окно анализа, потому что проверки BuilderModes пишут результаты прямо в него), `zt_get_build`.
-- Дальше по плану: `render_2d`, `get_element` с соседями, `sector_at`, `script_write`, `check_script_refs`.
+- `render_2d` — схема области карты в PNG (линии по типу, вещи, подсвеченные элементы с номерами, секторы залиты по
+  триангуляции), из карты в памяти, вид в UDB не меняется; `zt_test_map` — тест карты в игре по порядку мода.
+- Дальше по плану: `get_element` с соседями, `sector_at`, `check_script_refs`, `list_polyobjects`, `list_portals`.
 
 ## 1. Что показал опыт
 

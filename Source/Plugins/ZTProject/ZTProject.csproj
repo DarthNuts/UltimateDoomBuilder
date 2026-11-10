@@ -41,12 +41,14 @@
     <Compile Include="BuilderPlug.Check.cs" />
     <Compile Include="BuilderPlug.Mcp.cs" />
     <Compile Include="BuilderPlug.Src.cs" />
+    <Compile Include="BuilderPlug.Test.cs" />
     <Compile Include="BuilderPlug.Watch.cs" />
     <Compile Include="Dialogs.cs" />
     <Compile Include="Git.cs" />
     <Compile Include="MapConflicts.cs" />
     <Compile Include="MapNav.cs" />
     <Compile Include="MapReload.cs" />
+    <Compile Include="Mcp\MapRender.cs" />
     <Compile Include="Mcp\McpServer.cs" />
     <Compile Include="Mcp\McpTools.cs" />
     <Compile Include="Mcp\McpToolsMore.cs" />

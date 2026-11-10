@@ -44,11 +44,13 @@ namespace CodeImp.DoomBuilder.ZTProject
 			srcmenu = new ToolStripMenuItem("Ресурсы из src/ (без сборки pk3)", null, (s, e) => ToggleSrc()) { Checked = SrcResourceOn };
 			ToolStripMenuItem openfile = new ToolStripMenuItem("Открыть файл проекта…", null, (s, e) => OpenProjectFile());
 			ToolStripMenuItem check = new ToolStripMenuItem("Проверить скрипты мода (GZDoom)", null, (s, e) => CheckScriptsAction());
+			ToolStripMenuItem test = new ToolStripMenuItem("Тест карты в игре (порядок мода, src/)", null, (s, e) => TestMapAction());
 			int i = 0;
 			while(i < menu.DropDownItems.Count && menu.DropDownItems[i] != buildmenu) i++;
 			menu.DropDownItems.Insert(Math.Min(i + 1, menu.DropDownItems.Count), srcmenu);
 			menu.DropDownItems.Insert(2, openfile);     // после «Открыть карту проекта…» и «Папка проекта…»
 			menu.DropDownItems.Insert(3, check);
+			menu.DropDownItems.Insert(4, test);
 			srctimer = new Timer { Interval = 2000 };       // git и редакторы пишут пачками — ждём тишины
 			srctimer.Tick += (s, e) => SrcTick();
 			ZTMapTools.ConfigResourceFilter = FilterForSrc;
