@@ -39,6 +39,9 @@ namespace CodeImp.DoomBuilder.Map
 		#region ================== Properties
 
 		public bool Selected { get { return selected; } set { if(value && !selected) DoSelect(); else if(!value && selected) DoUnselect(); } }
+
+		// ZT: маска групп — чтобы сохранить её при копировании свойств из другого MapSet (ZT.ZTMapTools.CopyProperties)
+		internal int GroupsMask { get { return groups; } set { groups = value; } }
 		
 		#endregion
 		

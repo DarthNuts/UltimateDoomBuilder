@@ -2143,7 +2143,7 @@ namespace CodeImp.DoomBuilder
 		}
 
 		//mxd. Update script numbers and names, collect loose ACS files.
-		private void LoadACS()
+		internal void LoadACS() // ZT: internal — имена скриптов после замены лампа SCRIPTS (ZT.ZTMapTools.ReplaceMapLump)
 		{
 			///////////////////////////////////////////
 			// Step 1: Update script numbers and names

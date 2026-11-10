@@ -573,6 +573,16 @@ namespace CodeImp.DoomBuilder.Controls
 			}
 		}
 
+		// ZT: перечитать вкладку лампа карты после того, как лампу заменили снаружи (ZTMapTools.ReplaceMapLump)
+		internal void ReloadLumpTab(string lumpname)
+		{
+			foreach(ScriptDocumentTab t in tabs.TabPages)
+			{
+				ScriptLumpDocumentTab lt = t as ScriptLumpDocumentTab;
+				if(lt != null && string.Equals(lt.Filename, lumpname, StringComparison.OrdinalIgnoreCase)) lt.ReloadFromLump();
+			}
+		}
+
 		// This clears all error marks and hides the errors list
 		public void ClearErrors()
 		{

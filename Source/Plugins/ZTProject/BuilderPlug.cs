@@ -12,6 +12,7 @@ using CodeImp.DoomBuilder.Editing;
 using CodeImp.DoomBuilder.Geometry;
 using CodeImp.DoomBuilder.Plugins;
 using CodeImp.DoomBuilder.Windows;
+using CodeImp.DoomBuilder.ZT;
 
 #endregion
 
@@ -21,7 +22,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 	// - карта открывается прямо из wad-src/ рабочей копии git и после каждого сохранения раскладывается обратно в файлы;
 	// - «Отправить свежие правки» — сохранить, закоммитить всё, отправить свою ветку;
 	// - «Получить свежие правки» — сохранить, закоммитить локальное, слить свою ветку с сервера, перечитать карту.
-	public class BuilderPlug : Plug
+	public partial class BuilderPlug : Plug
 	{
 		#region ================== Variables
 
@@ -62,10 +63,12 @@ namespace CodeImp.DoomBuilder.ZTProject
 			me = this;
 			General.Actions.BindMethods(this);
 			CreateInterface();
+			InitMcp();
 		}
 
 		public override void Dispose()
 		{
+			DisposeMcp();
 			if(branchtimer != null) { branchtimer.Stop(); branchtimer.Dispose(); branchtimer = null; }
 			if(branchlabel != null) General.MainWindow.RemoveStatusItem(branchlabel);
 			if(branchseparator != null) General.MainWindow.RemoveStatusItem(branchseparator);
@@ -85,6 +88,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 			menu.DropDownItems.Add(new ToolStripSeparator());
 			menu.DropDownItems.Add(new ToolStripMenuItem("Отправить свежие правки", null, (s, e) => Send()));
 			menu.DropDownItems.Add(new ToolStripMenuItem("Получить свежие правки", null, (s, e) => Get()));
+			menu.DropDownItems.Add(new ToolStripSeparator());
+			menu.DropDownItems.Add(new ToolStripMenuItem("Перечитать карту из файлов", null, (s, e) => ReloadFromFiles()));
 			General.Interface.AddMenu(menu);
 
 			separator = new ToolStripSeparator();
@@ -143,6 +148,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 		public override void OnMapOpenEnd()
 		{
 			base.OnMapOpenEnd();
+			Mcp.McpTools.Revision++;
 			ProjectMap pm;
 			current = (General.Map != null && !string.IsNullOrEmpty(General.Map.FilePathName) &&
 			           projectmaps.TryGetValue(Path.GetFullPath(General.Map.FilePathName), out pm)) ? pm : null;
@@ -153,6 +159,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 		public override void OnMapCloseEnd()
 		{
 			base.OnMapCloseEnd();
+			Mcp.McpTools.Revision++;
 			current = null;
 		}
 
@@ -273,6 +280,36 @@ namespace CodeImp.DoomBuilder.ZTProject
 			}
 		}
 
+		// Перечитать открытую карту из wad-src/ (файлы поменяли вне UDB: скрипт, git, правка руками) — на месте, одним шагом
+		// отмены; несохранённые правки UDB при этом заменяются версией из файлов (вернуть — тем же Ctrl+Z)
+		[BeginAction("ztreloadmap")]
+		private void ReloadFromFiles()
+		{
+			if(current == null || General.Map == null)
+			{
+				General.ShowWarningMessage("ZT: открыта не карта проекта (ZT → «Открыть карту проекта…»).", MessageBoxButtons.OK);
+				return;
+			}
+			if(General.Map.IsChanged &&
+			   General.ShowWarningMessage("ZT: в карте " + current.MapName + " есть несохранённые правки. Заменить их версией из файлов " +
+			                              current.MapFolder.Replace('/', '\\') + "?\n\nВернуть правки карты можно будет через Ctrl+Z, " +
+			                              "несохранённый текст скриптов — нет.", MessageBoxButtons.YesNo) != DialogResult.Yes)
+				return;
+			try
+			{
+				string text = ReloadCurrentMap("ZT: карта перечитана из файлов", true);
+				General.Interface.DisplayStatus(StatusType.Info, "ZT: " + text);
+			}
+			catch(Exception ex)
+			{
+				General.ShowErrorMessage("ZT: перечитать карту не удалось.\n" + ex.Message, MessageBoxButtons.OK);
+			}
+			finally
+			{
+				Cursor.Current = Cursors.Default;
+			}
+		}
+
 		#endregion
 
 		#region ================== Git flow
@@ -291,8 +328,10 @@ namespace CodeImp.DoomBuilder.ZTProject
 		}
 
 		// Слить свою ветку с сервера. Неотправленные правки сначала коммитятся локально — они не теряются.
+		// Карты сливаются семантически (драйвер merge=udmf), остальные файлы — обычным слиянием git.
 		private bool Pull(string dir, bool report)
 		{
+			EnsureMergeDriver(dir);
 			string branch = CurrentBranch(dir);
 			List<string> dirty = Git.Lines(Git.Run(dir, "status", "--porcelain"));
 			if(dirty.Count > 0)
@@ -304,21 +343,35 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 			string before = Git.Run(dir, "rev-parse", "HEAD").StdOut.Trim();
 			GitResult pull = Git.Run(dir, "pull", "--no-rebase", "--no-edit", "origin", branch);
+			string resolved = null;
 			if(!pull.Ok)
 			{
 				List<string> conflicts = Git.Lines(Git.Run(dir, "diff", "--name-only", "--diff-filter=U"));
-				if(conflicts.Count > 0)
-				{
-					Git.Run(dir, "merge", "--abort");
-					Dialogs.ShowText(General.Interface, "ZT: получить не удалось — конфликт",
-						"Слияние отменено, ваши правки на месте (локальный коммит).\r\nКонфликт в файлах:\r\n  " +
-						string.Join("\r\n  ", conflicts) + "\r\n\r\nСемантическое слияние карт — следующий шаг этапа 2.\r\n\r\n" + pull.Output);
-				}
-				else
+				if(conflicts.Count == 0)
 				{
 					Dialogs.ShowText(General.Interface, "ZT: получить не удалось", pull.Output);
+					return false;
 				}
-				return false;
+
+				// Конфликтуют только карты — их решают в окне конфликтов, слияние не отменяется
+				string why = null;
+				bool cancelled = false;
+				if(!conflicts.All(MapConflicts.IsMapTextmap) || !ResolveMapConflicts(dir, conflicts, out why, out cancelled))
+				{
+					Git.Run(dir, "merge", "--abort");
+					if(cancelled)
+					{
+						General.Interface.DisplayStatus(StatusType.Info, "ZT: слияние отменено — всё как до «Получить», ваши правки в локальном коммите.");
+						return false;
+					}
+					Dialogs.ShowText(General.Interface, "ZT: получить не удалось — конфликт",
+						"Слияние отменено, ваши правки на месте (локальный коммит).\r\nКонфликт в файлах:\r\n  " +
+						string.Join("\r\n  ", conflicts) + (why != null ? "\r\n\r\n" + why : "") +
+						"\r\n\r\nКарты git сливает семантически (ZTMapMerge), конфликты карт решаются в окне конфликтов; конфликт в " +
+						"других файлах (скрипты, src/) пока решается вручную или в чате с ИИ. Вывод git — ниже.\r\n\r\n" + pull.Output);
+					return false;
+				}
+				resolved = "Конфликты карт решены в окне конфликтов, слияние закоммичено.";
 			}
 
 			string after = Git.Run(dir, "rev-parse", "HEAD").StdOut.Trim();
@@ -330,10 +383,10 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 			List<string> changed = Git.Lines(Git.Run(dir, "diff", "--name-only", before, after));
 			List<string> commits = Git.Lines(Git.Run(dir, "log", "--no-merges", "--format=%h %s", before + ".." + after));
-			bool reloaded = false;
-			if(current != null && current.IsTouchedBy(changed)) reloaded = ReloadCurrentMap();
+			string reload = null;
+			if(current != null && current.IsTouchedBy(changed)) reload = ReloadCurrentMap("ZT: получены свежие правки", false);
 
-			string text = "Получено коммитов: " + commits.Count + (reloaded ? ". Карта " + current.MapName + " перечитана." : ".");
+			string text = "Получено коммитов: " + commits.Count + "." + (resolved != null ? " " + resolved : "") + (reload != null ? " " + reload : "");
 			General.Interface.DisplayStatus(StatusType.Info, "ZT: " + text);
 			if(report)
 				Dialogs.ShowText(General.Interface, "ZT: получены свежие правки", text + "\r\n\r\n" + string.Join("\r\n", commits) +
@@ -341,19 +394,72 @@ namespace CodeImp.DoomBuilder.ZTProject
 			return true;
 		}
 
-		// Перечитать открытую карту проекта после получения правок: та же игровая конфигурация и ресурсы, тот же вид.
-		// Пробная версия: карта открывается заново, история отмены начинается с нуля.
-		private bool ReloadCurrentMap()
+		// Конфликты карт при слиянии: окно выбора, запись выбора в TEXTMAP, коммит слияния. false — слияние надо отменить
+		// (cancelled — пользователь сам отменил, иначе причина — в why).
+		private bool ResolveMapConflicts(string dir, List<string> conflicts, out string why, out bool cancelled)
+		{
+			cancelled = false;
+			List<MapConflictFile> files = MapConflicts.Load(dir, conflicts, out why);
+			if(files == null) return false;
+
+			Cursor.Current = Cursors.Default;
+			Func<MapConflictFile, bool> canshow = f => current != null && General.Map != null &&
+				string.Equals(current.MapFolder + "TEXTMAP", f.Path, StringComparison.OrdinalIgnoreCase);
+			if(!MapConflicts.Ask(General.Interface, files, canshow)) { cancelled = true; return false; }
+			Cursor.Current = Cursors.WaitCursor;
+
+			why = MapConflicts.Apply(dir, files);
+			if(why != null) return false;
+			List<string> left = Git.Lines(Git.Run(dir, "diff", "--name-only", "--diff-filter=U"));
+			if(left.Count > 0) { why = "Остались неслитые файлы: " + string.Join(", ", left); return false; }
+
+			// Сообщение слияния git (без строк-комментариев) и итог выбора
+			string msg = "Merge";
+			string msgpath = Git.Run(dir, "rev-parse", "--git-path", "MERGE_MSG").StdOut.Trim();
+			if(msgpath.Length > 0)
+			{
+				string full = Path.Combine(dir, msgpath.Replace('/', Path.DirectorySeparatorChar));
+				if(File.Exists(full))
+					msg = string.Join("\n", File.ReadAllLines(full, Encoding.UTF8).Where(l => !l.StartsWith("#"))).Trim();
+			}
+			GitResult commit = Git.CommitWithMessage(dir, msg + "\n\n" + MapConflicts.Summary(files) + "\n");
+			if(!commit.Ok) { why = "Коммит слияния не удался:\n" + commit.Output; return false; }
+			return true;
+		}
+
+		// Перечитать открытую карту проекта из файлов wad-src/. Сначала — на месте, одним шагом отмены (MapReload): вид,
+		// режим и выделение остаются. Если на месте не вышло — карта открывается заново (та же игровая конфигурация и
+		// ресурсы, тот же вид), история отмены начинается с нуля. Возвращает строку для отчёта.
+		private string ReloadCurrentMap(string undodescription, bool force)
 		{
 			ProjectMap pm = current;
+			pm.BuildWad();
+			string why;
+			try
+			{
+				Cursor.Current = Cursors.WaitCursor;
+				MapReload r = MapReload.Apply(pm.ReadLumps(), undodescription, force, out why);
+				if(r != null)
+				{
+					if(!r.MapChanged && r.Lumps.Count == 0) return "Карта " + pm.MapName + " уже совпадает с файлами.";
+					return "Карта " + pm.MapName + " перечитана на месте: " + r.Describe() + "." + (r.MapChanged ? " Откатить — Ctrl+Z." : "");
+				}
+			}
+			catch(Exception ex)
+			{
+				why = ex.Message;
+			}
+			General.WriteLogLine("ZT: на месте карту перечитать не удалось (" + why + ") — открывается заново");
+
+			// Правда — в файлах: недоделанный перенос в памяти не сохранять (иначе UDB спросит и запишет его в wad-src/)
+			ZTMapTools.MarkSaved();
 			var options = General.Map.Options;
 			float ox = General.Map.Renderer2D.OffsetX, oy = General.Map.Renderer2D.OffsetY, scale = General.Map.Renderer2D.Scale;
 			bool classic = General.Editing.Mode is ClassicMode;
-			pm.BuildWad();
 			General.OpenMapFileWithOptions(pm.WadPath, options);
 			ClassicMode mode = General.Editing.Mode as ClassicMode;
 			if(classic && mode != null) mode.CenterOnCoordinates(new Vector2D(ox, oy), scale);
-			return General.Map != null;
+			return "Карта " + pm.MapName + " открыта заново (на месте не вышло: " + why + "); история отмены начата заново.";
 		}
 
 		// Сохранить открытую карту проекта, если в ней есть правки (сохранение само раскладывает лампы в wad-src/)
@@ -361,6 +467,18 @@ namespace CodeImp.DoomBuilder.ZTProject
 		{
 			if(General.Map == null || current == null || !General.Map.IsChanged) return true;
 			return General.SaveMap();
+		}
+
+		// Драйвер семантического слияния карт (Tools\ZTMapMerge рядом с UDB) — в настройки рабочей копии.
+		// Каким файлам он назначен, решает .gitattributes проекта (merge=udmf у TEXTMAP карт, которые правят в UDB).
+		private static void EnsureMergeDriver(string dir)
+		{
+			string tool = Path.Combine(General.AppPath, "Tools", "ZTMapMerge", "ZTMapMerge.dll");
+			if(!File.Exists(tool)) return;
+			string driver = "dotnet \"" + tool.Replace('\\', '/') + "\" merge %O %A %B";
+			if(Git.Run(dir, "config", "--get", "merge.udmf.driver").StdOut.Trim() == driver) return;
+			Git.Run(dir, "config", "merge.udmf.name", "ZT: семантическое слияние карт UDMF (ZTMapMerge)");
+			Git.Run(dir, "config", "merge.udmf.driver", driver);
 		}
 
 		private static string CurrentBranch(string dir)

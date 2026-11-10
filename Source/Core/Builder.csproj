@@ -639,6 +639,7 @@
     <Compile Include="Geometry\LinedefSide.cs" />
     <Compile Include="Map\MapOptions.cs" />
     <Compile Include="Map\MapSet.cs" />
+    <Compile Include="ZT\ZTMapTools.cs" />
     <Compile Include="Data\DataLocation.cs" />
     <Compile Include="Map\Sector.cs" />
     <Compile Include="Map\Sidedef.cs" />

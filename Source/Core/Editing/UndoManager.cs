@@ -71,6 +71,7 @@ namespace CodeImp.DoomBuilder.Editing
 			IndexThing,
 			IndexSector,
 			IndexVertex,
+			IndexSidedef, // ZT: перестановка сторон (перечитывание карты на месте, плагин ZTProject)
 		}
 		
 		#endregion
@@ -433,6 +434,7 @@ namespace CodeImp.DoomBuilder.Editing
 						case StreamCodes.IndexThing: PlayIndexThing(ds); break;
 						case StreamCodes.IndexSector: PlayIndexSector(ds); break;
 						case StreamCodes.IndexVertex: PlayIndexVertex(ds); break;
+						case StreamCodes.IndexSidedef: PlayIndexSidedef(ds); break;
 					}
 					
 					// Sanity check
@@ -1408,6 +1410,23 @@ namespace CodeImp.DoomBuilder.Editing
 			// oldindex and newindex are flipped here because we have to change them back
 			General.Map.UndoRedo.RecIndexVertex(newindex, oldindex);
 			General.Map.Map.ChangeVertexIndex(newindex, oldindex);
+		}
+
+		// ZT: как у вершин — перестановка стороны записывается и откатывается
+		internal void RecIndexSidedef(int oldindex, int newindex)
+		{
+			if (!BeginRecordData(StreamCodes.IndexSidedef)) return;
+			ss.wInt(oldindex);
+			ss.wInt(newindex);
+			EndRecordData();
+		}
+
+		private static void PlayIndexSidedef(DeserializerStream ds)
+		{
+			ds.rInt(out int oldindex);
+			ds.rInt(out int newindex);
+			General.Map.UndoRedo.RecIndexSidedef(newindex, oldindex);
+			General.Map.Map.ChangeSidedefIndex(newindex, oldindex);
 		}
 
 		#endregion

@@ -9,10 +9,12 @@
 # (-NativeFrom). The updater is disabled (NO_UPDATER), so the build never offers to "update" to upstream.
 #
 # Usage (PowerShell): .\zt-build.ps1 [-NativeFrom "<UDB folder with BuilderNative.dll>"] [-NoZip]
+#                     .\zt-build.ps1 -Plugin ZTProject   # ZT: пересобрать только плагин (ядро уже собрано в Build\)
 
 param(
 	[string]$NativeFrom = "$env:LOCALAPPDATA\Programs\Ultimate Doom Builder",
-	[switch]$NoZip
+	[switch]$NoZip,
+	[string]$Plugin
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +64,13 @@ function Invoke-Build([string]$project, [string[]]$extra) {
 	if ($LASTEXITCODE -ne 0) { throw "Build failed: $project" }
 }
 
+# ZT: быстрая пересборка одного плагина — ядро и остальное уже лежат в Build\ (UDB при этом должен быть закрыт)
+if ($Plugin) {
+	Invoke-Build "Source\Plugins\$Plugin\$Plugin.csproj" @('-p:BuildProjectReferences=false')
+	Write-Host "Done: $build\Plugins\$Plugin.dll"
+	return
+}
+
 # Core first: its build cleans Build\ and copies the assets there
 Invoke-Build 'Source\Core\Builder.csproj' @('-p:DefineConstants=TRACE%3BNO_UPDATER')
 
@@ -71,6 +80,12 @@ $plugins = 'AutomapMode\AutomapMode', 'BlockmapExplorer\BlockmapExplorer', 'Buil
 	'TagExplorer\TagExplorer', 'TagRange\TagRange', '3DFloorMode\ThreeDFloorMode', 'UDBScript\UDBScript',
 	'VisplaneExplorer\VisplaneExplorer', 'ZTProject\ZTProject'
 foreach ($p in $plugins) { Invoke-Build "Source\Plugins\$p.csproj" @('-p:BuildProjectReferences=false') }
+
+# ZT: семантическое слияние TEXTMAP — консольная утилита (.NET SDK, net10.0) для драйвера слияния git;
+# плагин ZTProject прописывает её в рабочую копию проекта (merge.udmf.driver)
+Write-Host "== Source\Tools\ZTMapMerge"
+& dotnet build (Join-Path $root 'Source\Tools\ZTMapMerge\ZTMapMerge.csproj') -c Release -o (Join-Path $build 'Tools\ZTMapMerge') --nologo -v q
+if ($LASTEXITCODE -ne 0) { throw 'Build failed: ZTMapMerge' }
 
 # Native library from an installed UDB
 $native = Join-Path $NativeFrom 'BuilderNative.dll'

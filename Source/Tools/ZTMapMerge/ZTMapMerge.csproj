@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Семантическое слияние TEXTMAP (ZT/workbench-plan.md §8.2). Консольная утилита для git на ПК и на ИИ-машине;
+       файлы Udmf/*.cs написаны под C# 7.3 без зависимостей — их же подключает плагин ZTProject (.NET Framework 4.7.2). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>ZTMapMerge</RootNamespace>
+    <AssemblyName>ZTMapMerge</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+</Project>

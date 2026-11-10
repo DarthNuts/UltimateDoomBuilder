@@ -123,11 +123,10 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 		#region ================== WAD
 
-		// Собирает временный WAD карты из файлов wad-src/ (порядок лампов — как у build-wad.py)
-		public void BuildWad()
+		// Лампы карты из файлов wad-src/ в порядке build-wad.py (без маркера карты и ENDMAP)
+		public List<KeyValuePair<string, byte[]>> ReadLumps()
 		{
 			List<KeyValuePair<string, byte[]>> lumps = new List<KeyValuePair<string, byte[]>>();
-			lumps.Add(new KeyValuePair<string, byte[]>(MapName, new byte[0]));
 			foreach(Entry e in entries)
 			{
 				if(e.Name == "SCRIPTS")
@@ -142,6 +141,15 @@ namespace CodeImp.DoomBuilder.ZTProject
 					lumps.Add(new KeyValuePair<string, byte[]>(e.Name, File.ReadAllBytes(Abs(e.File))));
 				}
 			}
+			return lumps;
+		}
+
+		// Собирает временный WAD карты из файлов wad-src/
+		public void BuildWad()
+		{
+			List<KeyValuePair<string, byte[]>> lumps = new List<KeyValuePair<string, byte[]>>();
+			lumps.Add(new KeyValuePair<string, byte[]>(MapName, new byte[0]));
+			lumps.AddRange(ReadLumps());
 			lumps.Add(new KeyValuePair<string, byte[]>("ENDMAP", new byte[0]));
 			WadFile.Write(WadPath, lumps);
 		}

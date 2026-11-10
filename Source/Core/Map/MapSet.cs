@@ -856,6 +856,8 @@ namespace CodeImp.DoomBuilder.Map
 
 		internal void ChangeVertexIndex(int oldindex, int newindex) => ChangeItemIndex(ref vertices, oldindex, newindex, numvertices);
 
+		internal void ChangeSidedefIndex(int oldindex, int newindex) => ChangeItemIndex(ref sidedefs, oldindex, newindex, numsidedefs); // ZT
+
 		#endregion
 
 		#region ================== Serialization

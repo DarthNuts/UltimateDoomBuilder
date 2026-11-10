@@ -37,10 +37,24 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BuilderPlug.cs" />
+    <Compile Include="BuilderPlug.Mcp.cs" />
     <Compile Include="Dialogs.cs" />
     <Compile Include="Git.cs" />
+    <Compile Include="MapConflicts.cs" />
+    <Compile Include="MapNav.cs" />
+    <Compile Include="MapReload.cs" />
+    <Compile Include="Mcp\McpServer.cs" />
+    <Compile Include="Mcp\McpTools.cs" />
+    <Compile Include="Mcp\UiAutomation.cs" />
     <Compile Include="ProjectMap.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <!-- Общие с утилитой ZTMapMerge файлы семантического слияния (C# 7.3, без зависимостей) -->
+    <Compile Include="..\..\Tools\ZTMapMerge\Udmf\UdmfMap.cs">
+      <Link>Udmf\UdmfMap.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Tools\ZTMapMerge\Udmf\UdmfMerger.cs">
+      <Link>Udmf\UdmfMerger.cs</Link>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\Actions.cfg" />

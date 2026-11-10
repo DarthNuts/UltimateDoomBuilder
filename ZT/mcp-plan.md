@@ -11,6 +11,21 @@
 
 ---
 
+## 0. Статус на 10.11.2026
+
+Сделано раньше плана — чтобы агент сам проверял работу UDB (окно конфликтов карты проверено так целиком):
+- **Сервер — в плагине ZTProject** (`Source/Plugins/ZTProject/Mcp/`), а не отдельным ZTMcp (решение §5.3 изменено):
+  инструментам нужны папка проекта, «Получить» и перечитывание карты. Транспорт — Streamable HTTP на
+  `127.0.0.1:47390/mcp`, но HTTP свой, поверх `TcpListener`: `HttpListener` требует резервирования адреса (`netsh`).
+- Режимы Off / Read-only / Read-write в меню ZT, токен, файл подключения `%LOCALAPPDATA%\ZTWorkbench\mcp.json`,
+  переменная `ZT_MCP` для запуска UDB агентом.
+- Инструменты: `map_info`, `get_elements`, `query_elements`, `get_selection`, `select` (P1 §3.1–3.2 в упрощённом
+  виде: поля — по снимку TEXTMAP из памяти); окна UDB — `ui_windows`, `ui_click`, `ui_select_rows`, `ui_set_text`,
+  `screenshot` (новое: без них модальные окна плагина агенту не проверить); `run_action`, `undo`/`redo`;
+  `zt_set_project`, `zt_open_map`, `zt_reload_map`.
+- `map_revision` — счётчик шагов отмены, откатов, повторов и открытий карты (правки внутри одного шага он не видит).
+- Дальше по плану: `config_catalog`, `scripts_*`, `map_analysis`, правка полей (`set_fields`) с ревизией, `render_2d`.
+
 ## 1. Что показал опыт
 
 | Что делали | Как делали | Чем больно | Что даст MCP |

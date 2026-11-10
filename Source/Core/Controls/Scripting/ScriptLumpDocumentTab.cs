@@ -123,6 +123,16 @@ namespace CodeImp.DoomBuilder.Controls
 			return true;
 		}
 
+		// ZT: перечитать текст из лампа временного WAD (ламп заменили снаружи — «Получить» плагина ZTProject)
+		internal void ReloadFromLump()
+		{
+			MemoryStream stream = General.Map.GetLumpData(lumpname);
+			editor.SetText(stream != null ? stream.ToArray() : new byte[0]);
+			editor.ClearUndoRedo();
+			editor.SetSavePoint();
+			UpdateTitle();
+		}
+
 		// This checks if a script error applies to this script
 		public override bool VerifyErrorForScript(CompilerError e)
 		{

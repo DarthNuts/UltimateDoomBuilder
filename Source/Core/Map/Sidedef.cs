@@ -657,6 +657,16 @@ namespace CodeImp.DoomBuilder.Map
 			General.Map.IsChanged = true;
 		}
 
+		/// <summary>
+		/// ZT: changes the sidedef's index to a new index (as for vertices, linedefs, sectors and things).
+		/// </summary>
+		/// <param name="newindex">The new index to set</param>
+		public void ChangeIndex(int newindex)
+		{
+			General.Map.UndoRedo.RecIndexSidedef(Index, newindex);
+			map?.ChangeSidedefIndex(Index, newindex);
+		}
+
 		//mxd. String representation
 		public override string ToString()
 		{
