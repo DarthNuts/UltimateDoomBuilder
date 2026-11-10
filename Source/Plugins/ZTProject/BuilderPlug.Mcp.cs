@@ -184,7 +184,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 			return new Dictionary<string, object>
 			{
 				{ "project_dir", dir }, { "project_valid", valid }, { "branch", valid ? ReadBranch(dir) : null },
-				{ "project_map", current != null ? current.MapName : null }
+				{ "project_map", current != null ? current.MapName : null },
+				{ "build", BuildStatus }
 			};
 		}
 
@@ -207,21 +208,10 @@ namespace CodeImp.DoomBuilder.ZTProject
 				throw new InvalidOperationException("в открытой карте есть несохранённые правки — их сохраняет или отменяет человек");
 
 			ProjectMap pm = ProjectMap.Load(dir, mapname);
-			string dbs = Path.ChangeExtension(pm.WadPath, ".dbs");
-			if(!File.Exists(dbs))
-			{
-				string root = Path.GetDirectoryName(Path.GetDirectoryName(pm.WadPath));
-				string src = Directory.GetFiles(root, mapname + ".dbs", SearchOption.AllDirectories).FirstOrDefault() ??
-				             Directory.GetFiles(root, "*.dbs", SearchOption.AllDirectories).FirstOrDefault();
-				if(src == null) throw new InvalidOperationException("нет параметров карты (.dbs) — один раз откройте карту проекта в UDB вручную");
-				File.Copy(src, dbs);
-			}
-			Configuration cfg = new Configuration(dbs, true);
-			string configfile = cfg.ReadSetting("gameconfig", "");
-			if(!General.ConfigurationInfoExist(configfile)) throw new InvalidOperationException("в " + dbs + " нет известной игровой конфигурации");
-			ConfigurationInfo ci = General.GetConfigurationInfo(configfile);
-			MapOptions options = new MapOptions(cfg, mapname, ci.Configuration.ReadSetting("longtexturenames", false));
-			options.ConfigFile = configfile;
+			MapOptions options = ProjectOptions(pm, true);
+			if(options == null) throw new InvalidOperationException("нет параметров карты (.dbs) — один раз откройте карту проекта в UDB вручную");
+			ConfigurationInfo ci = General.GetConfigurationInfo(options.ConfigFile);
+			if(SrcResourceOn) AddSrcTo(options, pm);
 
 			pm.BuildWad();
 			projectmaps[pm.WadPath] = pm;
@@ -229,6 +219,28 @@ namespace CodeImp.DoomBuilder.ZTProject
 			General.OpenMapFileWithOptions(pm.WadPath, options);
 			if(General.Map == null) throw new InvalidOperationException("UDB не открыл карту (см. UDBuilder.log)");
 			return "открыта " + mapname + " из " + pm.ProjectDir + " (конфигурация " + ci.Name + ")";
+		}
+
+		// Параметры карты проекта без окна: из .dbs временного WAD; anydbs — если его нет, взять .dbs той же карты другой
+		// рабочей копии (или любой карты). null — параметров нет (первое открытие — окно параметров UDB).
+		internal static MapOptions ProjectOptions(ProjectMap pm, bool anydbs)
+		{
+			string dbs = Path.ChangeExtension(pm.WadPath, ".dbs");
+			if(!File.Exists(dbs))
+			{
+				string root = Path.GetDirectoryName(Path.GetDirectoryName(pm.WadPath));
+				string src = Directory.GetFiles(root, pm.MapName + ".dbs", SearchOption.AllDirectories).FirstOrDefault() ??
+				             (anydbs ? Directory.GetFiles(root, "*.dbs", SearchOption.AllDirectories).FirstOrDefault() : null);
+				if(src == null) return null;
+				File.Copy(src, dbs);
+			}
+			Configuration cfg = new Configuration(dbs, true);
+			string configfile = cfg.ReadSetting("gameconfig", "");
+			if(!General.ConfigurationInfoExist(configfile)) return null;
+			ConfigurationInfo ci = General.GetConfigurationInfo(configfile);
+			MapOptions options = new MapOptions(cfg, pm.MapName, ci.Configuration.ReadSetting("longtexturenames", false));
+			options.ConfigFile = configfile;
+			return options;
 		}
 
 		internal string McpReloadMap()

@@ -573,6 +573,29 @@ namespace CodeImp.DoomBuilder.Controls
 			}
 		}
 
+		// ZT: открыть файл с диска во вкладке (или показать уже открытую); keepws — не срезать хвостовые пробелы при сохранении
+		internal ScriptFileDocumentTab OpenFileTab(string path, ScriptConfiguration config, bool keepws)
+		{
+			foreach(ScriptDocumentTab t in tabs.TabPages)
+			{
+				ScriptFileDocumentTab ft = t as ScriptFileDocumentTab;
+				if(ft != null && string.Equals(ft.Filename, path, StringComparison.OrdinalIgnoreCase)) { tabs.SelectedTab = ft; return ft; }
+			}
+			ScriptFileDocumentTab tab = new ScriptFileDocumentTab(this, config) { KeepTrailingWhitespace = keepws };
+			if(!tab.Open(path)) { tab.Dispose(); return null; }
+			tabs.TabPages.Add(tab);
+			tabs.SelectedTab = tab;
+			return tab;
+		}
+
+		// ZT: открытые вкладки (для MCP и перечитывания файлов после «Получить»)
+		internal List<ScriptDocumentTab> OpenTabs()
+		{
+			List<ScriptDocumentTab> list = new List<ScriptDocumentTab>();
+			foreach(ScriptDocumentTab t in tabs.TabPages) list.Add(t);
+			return list;
+		}
+
 		// ZT: перечитать вкладку лампа карты после того, как лампу заменили снаружи (ZTMapTools.ReplaceMapLump)
 		internal void ReloadLumpTab(string lumpname)
 		{

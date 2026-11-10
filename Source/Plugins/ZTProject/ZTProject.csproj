@@ -37,7 +37,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BuilderPlug.cs" />
+    <Compile Include="BuilderPlug.Build.cs" />
+    <Compile Include="BuilderPlug.Check.cs" />
     <Compile Include="BuilderPlug.Mcp.cs" />
+    <Compile Include="BuilderPlug.Src.cs" />
     <Compile Include="BuilderPlug.Watch.cs" />
     <Compile Include="Dialogs.cs" />
     <Compile Include="Git.cs" />
@@ -46,6 +49,7 @@
     <Compile Include="MapReload.cs" />
     <Compile Include="Mcp\McpServer.cs" />
     <Compile Include="Mcp\McpTools.cs" />
+    <Compile Include="Mcp\McpToolsMore.cs" />
     <Compile Include="Mcp\UiAutomation.cs" />
     <Compile Include="ProjectMap.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

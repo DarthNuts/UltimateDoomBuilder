@@ -2,6 +2,9 @@
 
 using System;
 using System.IO;
+using System.Linq;
+using CodeImp.DoomBuilder.Config;
+using CodeImp.DoomBuilder.Data;
 using CodeImp.DoomBuilder.IO;
 using CodeImp.DoomBuilder.Map;
 
@@ -120,6 +123,97 @@ namespace CodeImp.DoomBuilder.ZT
 		public static void MarkSaved()
 		{
 			General.Map.ForceMapIsChangedFalse();
+		}
+
+		#endregion
+
+		#region ================== Resources
+
+		// Отбор ресурсов игровой конфигурации для открываемой карты (MapManager — при загрузке и перечитывании ресурсов).
+		// Плагин ZTProject: если ресурс карты — папка src/ рабочей копии, собранный из неё pk3 не грузится (иначе всё дважды).
+		public static Func<DataLocationList, DataLocationList> ConfigResourceFilter;
+
+		internal static DataLocationList FilterConfigResources(DataLocationList list)
+		{
+			Func<DataLocationList, DataLocationList> f = ConfigResourceFilter;
+			if(f == null) return list;
+			try { return f(list) ?? list; }
+			catch(Exception ex) { General.WriteLogLine("ZT: отбор ресурсов не удался: " + ex.Message); return list; }
+		}
+
+		#endregion
+
+		#region ================== Script files
+
+		// Тип скрипта по имени файла мода (ZSCRIPT.zs, *.zs, DECORATE, *.dec, *.acs, MAPINFO, SNDINFO…); иначе — простой текст
+		public static ScriptType ScriptTypeOf(string path)
+		{
+			string name = Path.GetFileName(path).ToUpperInvariant(), ext = Path.GetExtension(path).ToLowerInvariant();
+			string stem = Path.GetFileNameWithoutExtension(path).ToUpperInvariant();
+			if(ext == ".zs" || ext == ".zsc" || stem == "ZSCRIPT") return ScriptType.ZSCRIPT;
+			if(ext == ".dec" || stem == "DECORATE") return ScriptType.DECORATE;
+			if(ext == ".acs" || stem == "SCRIPTS") return ScriptType.ACS;
+			foreach(ScriptType t in Enum.GetValues(typeof(ScriptType)))
+				if(t != ScriptType.UNKNOWN && (stem == t.ToString() || stem == "Z" + t.ToString())) return t;   // MAPINFO, ZMAPINFO, SNDINFO…
+			return ScriptType.UNKNOWN;
+		}
+
+		// Открыть файл (например, из src/ рабочей копии) во вкладке редактора скриптов карты. keepws — не срезать хвостовые
+		// пробелы при сохранении. false — карта не открыта или файл не прочитан.
+		public static bool OpenScriptFile(string path, bool keepws)
+		{
+			if(General.Map == null || !File.Exists(path)) return false;
+			ScriptConfiguration cfg = General.GetScriptConfiguration(ScriptTypeOf(path)) ?? General.GetScriptConfiguration(ScriptType.UNKNOWN);
+			if(cfg == null) cfg = General.ScriptConfigs.Values.First();
+			General.Map.ShowScriptEditor();
+			return General.Map.ScriptEditor.Editor.OpenFileTab(path, cfg, keepws) != null;
+		}
+
+		// Вкладки редактора скриптов: заголовок, файл (для лампа — имя лампа), есть ли несохранённые правки
+		public static System.Collections.Generic.List<Tuple<string, string, bool>> ScriptTabs()
+		{
+			var list = new System.Collections.Generic.List<Tuple<string, string, bool>>();
+			if(General.Map == null || !General.Map.IsScriptsWindowOpen) return list;
+			foreach(var t in General.Map.ScriptEditor.Editor.OpenTabs()) list.Add(Tuple.Create(t.Title, t.Filename, t.IsChanged));
+			return list;
+		}
+
+		// Текст вкладки (по имени файла или лампа): прочитать; text != null — заменить (как правка в редакторе, с отменой);
+		// save — сохранить вкладку. null — вкладки нет.
+		public static string ScriptTabText(string file, string text, bool save)
+		{
+			if(General.Map == null || !General.Map.IsScriptsWindowOpen) return null;
+			foreach(var t in General.Map.ScriptEditor.Editor.OpenTabs())
+			{
+				if(!string.Equals(t.Filename, file, StringComparison.OrdinalIgnoreCase) && !string.Equals(t.Title, file, StringComparison.OrdinalIgnoreCase)) continue;
+				if(text != null) t.Editor.Scintilla.Text = text;
+				if(save) t.Save();
+				return t.Editor.Scintilla.Text;
+			}
+			return null;
+		}
+
+		// Показать ошибки (например, проверки ZScript в GZDoom) в списке ошибок редактора скриптов; клик открывает строку
+		// в открытой вкладке файла. Пустой список — убрать прежние ошибки.
+		public static void ShowScriptErrors(System.Collections.Generic.List<CodeImp.DoomBuilder.Compilers.CompilerError> errors)
+		{
+			if(General.Map == null) return;
+			if(errors.Count == 0 && !General.Map.IsScriptsWindowOpen) return;
+			General.Map.ShowScriptEditor();
+			General.Map.ScriptEditor.Editor.ShowErrors(errors, false);
+		}
+
+		// Перечитать вкладки файлов без несохранённых правок, если файлы поменяли снаружи («Получить», git). Возвращает число
+		public static int ReloadScriptFiles()
+		{
+			if(General.Map == null || !General.Map.IsScriptsWindowOpen) return 0;
+			int n = 0;
+			foreach(var t in General.Map.ScriptEditor.Editor.OpenTabs())
+			{
+				var ft = t as CodeImp.DoomBuilder.Controls.ScriptFileDocumentTab;
+				if(ft != null && ft.ReloadIfUnchanged()) n++;
+			}
+			return n;
 		}
 
 		#endregion

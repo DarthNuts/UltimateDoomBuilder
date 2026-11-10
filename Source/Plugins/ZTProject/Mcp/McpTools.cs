@@ -40,7 +40,7 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 
 	// Инструменты MCP-сервера UDB. Чтение карты — по снимку TEXTMAP, записанному тем же писателем, что при сохранении:
 	// номера и имена полей — как в файле. Правки и действия — только в режиме «чтение и правка».
-	internal sealed class McpTools
+	internal sealed partial class McpTools
 	{
 		#region ================== Types
 
@@ -60,7 +60,8 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 
 		public const string Instructions =
 			"Сервер Ultimate Doom Builder (форк Zero Tolerance). Карта, открытая в UDB: map_info, get_elements, query_elements, " +
-			"get_selection, select; правка полей — set_fields. Окна UDB: ui_windows, ui_click, ui_select_rows, ui_set_text, screenshot. Действия UDB и плагина " +
+			"get_selection, select; правка полей — set_fields; справочник — config_catalog; скрипты — scripts_list, script_read, " +
+			"scripts_compile; проверки — map_analysis. Окна UDB: ui_windows, ui_click, ui_select_rows, ui_set_text, screenshot. Действия UDB и плагина " +
 			"ZT: run_action (например ztproject_ztget — «Получить»), undo/redo, zt_set_project, zt_open_map, zt_reload_map. " +
 			"Номера элементов и имена полей — как в TEXTMAP; значения — литералы TEXTMAP (строки в кавычках). " +
 			"Действие, открывшее модальное окно, продолжается в UDB: смотрите ui_windows и нажимайте кнопки ui_click.";
@@ -81,6 +82,7 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 		{
 			this.plug = plug;
 			Register();
+			RegisterMore();
 		}
 
 		#endregion
@@ -454,6 +456,11 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				Run = a => RunUiAsync("zt_open_map", () => plug.McpOpenMap(Str(a, "map")), Int(a, "wait_ms", 120000))
 			});
 
+			Add("zt_get_build", "Плагин ZT: «Получить сборку» — машина собирает WAD и pk3 своей ветки с сервера (в ~/ci, тот же коммит " +
+			    "повторно не собирается), плагин скачивает изменившиеся файлы и перечитывает ресурсы UDB. Идёт в фоне: ход — " +
+			    "map_info → zt.build.", Schema("dest", "string", "папка для файлов (по умолчанию — папка GZDoom из настроек)"), true,
+			    a => ToolResult.Text(plug.GetBuild(Str(a, "dest"))));
+
 			tools.Add(new Tool
 			{
 				Name = "zt_reload_map", Writes = true, Timeout = 120000,
@@ -530,6 +537,8 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				{ "vertex", m.GetSelectedVertices(true).Count }, { "linedef", m.GetSelectedLinedefs(true).Count },
 				{ "sector", m.GetSelectedSectors(true).Count }, { "thing", m.GetSelectedThings(true).Count }
 			};
+			d["resources"] = General.Map.ConfigSettings.Resources.Select(r => (object)("config: " + r.location))
+				.Concat(General.Map.Options.Resources.Select(r => (object)("map: " + r.location))).ToList();
 			d["undo"] = General.Map.UndoRedo.GetUndoList().Take(10).Select(u => (object)u.Description).ToList();
 			d["redo"] = General.Map.UndoRedo.GetRedoList().Take(10).Select(u => (object)u.Description).ToList();
 			return d;

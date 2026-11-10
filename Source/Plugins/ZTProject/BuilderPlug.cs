@@ -10,6 +10,7 @@ using CodeImp.DoomBuilder.Actions;
 using CodeImp.DoomBuilder.Controls;
 using CodeImp.DoomBuilder.Editing;
 using CodeImp.DoomBuilder.Geometry;
+using CodeImp.DoomBuilder.Map;
 using CodeImp.DoomBuilder.Plugins;
 using CodeImp.DoomBuilder.Windows;
 using CodeImp.DoomBuilder.ZT;
@@ -63,12 +64,15 @@ namespace CodeImp.DoomBuilder.ZTProject
 			me = this;
 			General.Actions.BindMethods(this);
 			CreateInterface();
+			InitBuild();
+			InitSrc();
 			InitMcp();
 		}
 
 		public override void Dispose()
 		{
 			DisposeMcp();
+			DisposeSrc();
 			StopWatch();
 			if(watchtimer != null) { watchtimer.Dispose(); watchtimer = null; }
 			if(branchtimer != null) { branchtimer.Stop(); branchtimer.Dispose(); branchtimer = null; }
@@ -155,6 +159,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 			current = (General.Map != null && !string.IsNullOrEmpty(General.Map.FilePathName) &&
 			           projectmaps.TryGetValue(Path.GetFullPath(General.Map.FilePathName), out pm)) ? pm : null;
 			WatchMap();
+			// src/ в ресурсы — после того, как UDB закончит открывать карту (перечитывание ресурсов внутри OnMapOpenEnd рано)
+			if(current != null) General.MainWindow.BeginInvoke((MethodInvoker)(() => EnsureSrcResource(true)));
 			if(current != null)
 				General.Interface.DisplayStatus(StatusType.Info, "ZT: карта " + current.MapName + " из " + current.ProjectDir + "\\" + current.MapFolder.Replace('/', '\\'));
 		}
@@ -164,6 +170,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 			base.OnMapCloseEnd();
 			Mcp.McpTools.Revision++;
 			StopWatch();
+			StopSrcWatch();
 			current = null;
 		}
 
@@ -212,8 +219,15 @@ namespace CodeImp.DoomBuilder.ZTProject
 				pm.BuildWad();
 				projectmaps[pm.WadPath] = pm;
 				General.Settings.WritePluginSetting("lastmap", mapname);
-				// Окно параметров карты UDB: игровая конфигурация и ресурсы; запоминаются в .dbs рядом с временным WAD
-				General.OpenMapFile(pm.WadPath, null);
+				// Параметры уже есть (.dbs рядом с временным WAD или у той же карты другой рабочей копии) — сразу, с src/ в
+				// ресурсах; первый раз — окно параметров UDB (игровая конфигурация и ресурсы запомнятся в .dbs)
+				MapOptions options = ProjectOptions(pm, false);
+				if(options == null) General.OpenMapFile(pm.WadPath, null);
+				else
+				{
+					if(SrcResourceOn) AddSrcTo(options, pm);
+					General.OpenMapFileWithOptions(pm.WadPath, options);
+				}
 			}
 			catch(Exception ex)
 			{
@@ -396,6 +410,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 			List<string> commits = Git.Lines(Git.Run(dir, "log", "--no-merges", "--format=%h %s", before + ".." + after));
 			string reload = null;
 			if(current != null && current.IsTouchedBy(changed)) reload = ReloadCurrentMap("ZT: получены свежие правки", false);
+			SrcChangedBy(changed);
 
 			string text = "Получено коммитов: " + commits.Count + "." + (resolved != null ? " " + resolved : "") + (reload != null ? " " + reload : "");
 			General.Interface.DisplayStatus(StatusType.Info, "ZT: " + text);

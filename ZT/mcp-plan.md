@@ -30,7 +30,10 @@
 - `udmf_schema` — порядок полей TEXTMAP, как их пишет UDB, с флагами из игровой конфигурации (для скриптов мода).
 - `zt_open_map` и `run_action` не ждут модальных окон дольше `wait_ms`: если UDB показал окно (Errors and Warnings,
   вопрос), ответ — список окон, дальше `ui_click`.
-- Дальше по плану: `config_catalog`, `scripts_*`, `map_analysis`, `render_2d`.
+- `config_catalog` (спецы, эффекты, типы вещей с акторами мода, флаги, UDMF-поля), `scripts_list`, `script_read`,
+  `scripts_compile` (ACS с ошибками), `map_analysis` (Map Analysis UDB: режим анализа, выбор проверок, результаты с
+  элементами — через окно анализа, потому что проверки BuilderModes пишут результаты прямо в него), `zt_get_build`.
+- Дальше по плану: `render_2d`, `get_element` с соседями, `sector_at`, `script_write`, `check_script_refs`.
 
 ## 1. Что показал опыт
 

@@ -324,7 +324,7 @@ namespace CodeImp.DoomBuilder
 			// Load data manager
 			General.WriteLogLine("Loading data resources...");
 			data = new DataManager();
-			data.Load(configinfo.Resources, options.Resources);
+			data.Load(ZT.ZTMapTools.FilterConfigResources(configinfo.Resources), options.Resources);
 
 			// Update structures
 			options.ApplyGridSettings();
@@ -443,7 +443,7 @@ namespace CodeImp.DoomBuilder
 			General.WriteLogLine("Loading data resources...");
 			data = new DataManager();
 			DataLocation maplocation = new DataLocation(DataLocation.RESOURCE_WAD, filepathname, options.StrictPatches, false, false, null);
-			data.Load(configinfo.Resources, options.Resources, maplocation);
+			data.Load(ZT.ZTMapTools.FilterConfigResources(configinfo.Resources), options.Resources, maplocation);
 
 			// Remove unused sectors
 			map.RemoveUnusedSectors(true);
@@ -2457,11 +2457,11 @@ namespace CodeImp.DoomBuilder
 			if(!string.IsNullOrEmpty(filepathname)) 
 			{
 				DataLocation maplocation = new DataLocation(DataLocation.RESOURCE_WAD, filepathname, options.StrictPatches, false, false, null);
-				data.Load(configinfo.Resources, options.Resources, maplocation);
+				data.Load(ZT.ZTMapTools.FilterConfigResources(configinfo.Resources), options.Resources, maplocation);
 			}
 			else 
 			{
-				data.Load(configinfo.Resources, options.Resources);
+				data.Load(ZT.ZTMapTools.FilterConfigResources(configinfo.Resources), options.Resources);
 			}
 
 			// Apply new settings to map elements

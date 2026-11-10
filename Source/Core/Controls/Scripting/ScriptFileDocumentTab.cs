@@ -37,6 +37,7 @@ namespace CodeImp.DoomBuilder.Controls
 		#region ================== Variables
 		
 		private string filepathname;
+		private string diskhash;     // ZT: MD5 файла на диске при открытии или последнем сохранении
 		
 		#endregion
 		
@@ -109,6 +110,11 @@ namespace CodeImp.DoomBuilder.Controls
             RemoveTrailingWhitespace();
 
             byte[] data = editor.GetText();
+			// ZT: файл изменили вне редактора (например, «Получить» или правка в другом редакторе) — не затирать молча
+			if(diskhash != null && File.Exists(filepathname) && Hash(File.ReadAllBytes(filepathname)) != diskhash &&
+			   General.ShowWarningMessage("Файл " + filepathname + " изменён вне редактора с момента открытия.\n\n" +
+			                              "Перезаписать его текстом из редактора?", MessageBoxButtons.YesNo) != DialogResult.Yes)
+				return false;
             try
 			{
 				// Write the file
@@ -124,8 +130,29 @@ namespace CodeImp.DoomBuilder.Controls
 			}
 			
 			// Done
+			diskhash = Hash(data);
 			editor.SetSavePoint(data); //mxd
 			UpdateTitle(); //mxd
+			return true;
+		}
+
+		private static string Hash(byte[] data)
+		{
+			using(System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
+				return BitConverter.ToString(md5.ComputeHash(data));
+		}
+
+		// ZT: перечитать файл с диска, если в редакторе нет несохранённых правок (файл поменяли снаружи). true — перечитан
+		internal bool ReloadIfUnchanged()
+		{
+			if(editor.IsChanged || string.IsNullOrEmpty(filepathname) || !File.Exists(filepathname)) return false;
+			byte[] data = File.ReadAllBytes(filepathname);
+			if(Hash(data) == diskhash) return false;
+			editor.SetText(data);
+			editor.ClearUndoRedo();
+			editor.SetSavePoint(data);
+			diskhash = Hash(data);
+			UpdateTitle();
 			return true;
 		}
 		
@@ -153,7 +180,9 @@ namespace CodeImp.DoomBuilder.Controls
 			try
 			{
 				// Read the file (encoding is detected the same way as for lumps, so saving writes it back unchanged)
-				editor.SetText(File.ReadAllBytes(filepathname));
+				byte[] data = File.ReadAllBytes(filepathname);
+				editor.SetText(data);
+				diskhash = Hash(data);
 			}
 			catch(Exception e)
 			{

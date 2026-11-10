@@ -73,6 +73,8 @@ namespace CodeImp.DoomBuilder.Controls
 		public ScriptEditorControl Editor { get { return editor; } } //mxd
 		public string Title { get { return title; } } //mxd
 		public bool IsChanged { get { return editor.IsChanged; } }
+		// ZT: не срезать хвостовые пробелы при сохранении (файлы проекта: иначе первое сохранение даёт шум в git)
+		public bool KeepTrailingWhitespace { get; set; }
 		public int SelectionStart { get { return editor.SelectionStart; } set { editor.SelectionStart = value; } }
 		public int SelectionEnd { get { return editor.SelectionEnd; } set { editor.SelectionEnd = value; } }
 		public bool ShowWhitespace { get { return editor.ShowWhitespace; } set { editor.ShowWhitespace = value; } } //mxd
@@ -206,6 +208,8 @@ namespace CodeImp.DoomBuilder.Controls
 		// [ZZ] this removes trailing whitespace from every line
 		protected void RemoveTrailingWhitespace()
 		{
+			if(KeepTrailingWhitespace) return;
+
 			// after changing the contents, selection should stay on the same line, and just move to the end of that line if it was on the trailing space.
 			int vscroll = editor.Scintilla.FirstVisibleLine;
 			int selectionStart = editor.SelectionStart;
