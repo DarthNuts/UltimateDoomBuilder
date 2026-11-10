@@ -9,9 +9,13 @@
 | Ветка | Что в ней |
 |---|---|
 | `zt/script-encoding` | UTF-8 в редакторе скриптов: кодировка по умолчанию, автоопределение, перекодировка Windows-1251 ↔ UTF-8 |
-| `zt/workbench` | от `zt/script-encoding`: планы, плагин ZTProject, утилита ZTMapMerge (этап 2) |
+| `zt/workbench` | от `zt/script-encoding`: планы, плагин ZTProject (этапы 2–3: карта из `wad-src/`, «Отправить/Получить», слияние и конфликты карт, `src/` вместо pk3, «Получить сборку», проверка и тест в GZDoom, MCP-сервер, чат с Claude), утилита ZTMapMerge |
 
 Подтянуть upstream: `git fetch upstream` и слить `upstream/master` в нужную ветку `zt/*`.
+
+Файлы для ИИ-машины — в [machine/](machine/) (только LF): `post-receive` — хук голого репозитория (зеркало,
+перемотка рабочей копии, сборка и проверки после push); ставит владелец от root. Рецепт сборки `ci.sh` плагин
+ставит сам (`Source/Plugins/ZTProject/Resources/ci.sh` → `~/.zt/ci.sh`).
 
 ## Сборка и запуск
 

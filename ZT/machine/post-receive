@@ -1,0 +1,50 @@
+#!/bin/bash
+# Хук post-receive голого репозитория проекта на ИИ-машине (/srv/git/ZeroTolerance.git/hooks/post-receive, владелец root,
+# права 755). Работает от имени того, кто отправил (dev, design), — у каждого свои ~/projects и ~/ci.
+# 1) Отметка для службы зеркала (zt-mirror.path): после каждого push ветки уходят на GitHub
+date +%s > "$(git rev-parse --absolute-git-dir)/zt-mirror-pending" 2>/dev/null || true
+input=$(cat)
+
+# 2) Рабочая копия того, кто отправил (~/projects/ZeroTolerance), — перемотать вперёд, если она на той же
+#    ветке, без незакоммиченных правок и перемотка возможна. Иначе — только сообщение: Claude подтянет сам.
+wt="$HOME/projects/ZeroTolerance"
+if [ -d "$wt/.git" ]; then
+  while read -r old new ref; do
+    [ "$new" = 0000000000000000000000000000000000000000 ] && continue
+    branch=${ref#refs/heads/}
+    (
+      unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+      cd "$wt" || exit 0
+      [ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" = "$branch" ] || exit 0
+      head=$(git rev-parse HEAD)
+      [ "$head" = "$new" ] && exit 0
+      if [ -n "$(git status --porcelain)" ]; then
+        echo "ZT: рабочая копия на машине ($branch) не обновлена — в ней есть незакоммиченные правки"
+        exit 0
+      fi
+      git fetch -q origin "$branch" 2>/dev/null || exit 0
+      if git merge-base --is-ancestor "$head" "$new" && git merge -q --ff-only "$new" 2>/dev/null; then
+        echo "ZT: рабочая копия на машине ($branch) обновлена до ${new:0:7}"
+      else
+        echo "ZT: рабочая копия на машине ($branch) не обновлена — нужна не перемотка, а слияние"
+      fi
+    )
+  done <<< "$input"
+fi
+
+# 3) Сборка и проверки ветки (ZT/workbench-plan.md §2.2, п. 5) — в фоне, от имени того, кто отправил, в его ~/ci/
+#    (рецепт ~/.zt/ci.sh ставит плагин ZTProject UDB). Ветки main, dev, design; итог — ~/ci/out/<ветка>/status.
+#    Плагин после «Отправить» запускает то же сам; хук добавляет сборку push самого Claude с машины. Двойной запуск
+#    безвреден: сборки идут по очереди (flock), тот же коммит повторно не собирается.
+if [ -x "$HOME/.zt/ci.sh" ]; then
+  bare=$(git rev-parse --absolute-git-dir)
+  while read -r old new ref; do
+    [ "$new" = 0000000000000000000000000000000000000000 ] && continue
+    branch=${ref#refs/heads/}
+    case "$branch" in main|dev|design) ;; *) continue ;; esac
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY \
+        -u GIT_ALTERNATE_OBJECT_DIRECTORIES setsid nohup bash "$HOME/.zt/ci.sh" "$branch" "$bare" check \
+        < /dev/null > /dev/null 2>&1 &
+    echo "ZT: сборка и проверки $branch (${new:0:7}) запущены на машине"
+  done <<< "$input"
+fi

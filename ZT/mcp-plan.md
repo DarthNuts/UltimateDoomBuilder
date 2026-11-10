@@ -38,6 +38,11 @@
 - `sector_at`, `element_info` (элемент с соседями), `list_polyobjects` (без точки старта — мёртвый), `list_portals`,
   `check_script_refs` — имена и номера скриптов разбирает сам по тексту SCRIPTS: разбор ACS в UDB на скриптах мода
   падает и очищает списки имён. MAP01–MAP03: 652 вызова, битых нет; испорченная ссылка ловится.
+- Чат: `chat_start`, `chat_send` (без `text` — содержимое поля запроса), `chat_attach` (`kind`: `selection`,
+  `map_image`, `screenshot`, `file` + `path`), `chat_answer` (разрешение или `answers` на вопрос Claude),
+  `chat_log` (с `question` — ждущий вопрос), `chat_out` (карточки `~/out`, скачать); `zt_ci_status` — итог сборки и
+  проверок после push (`start` — запустить). `ui_click` нажимает и радиокнопки с галочками, кнопку — отложенно (если
+  она открывает окно, вызов не ждёт его закрытия).
 - Остались из плана: `split_sector`, `things_edit`, `save_map` с подтверждением, `run_udbscript`, `visual_screenshot`.
 
 ## 1. Что показал опыт
