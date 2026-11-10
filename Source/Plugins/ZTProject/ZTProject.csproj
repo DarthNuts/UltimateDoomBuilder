@@ -38,6 +38,9 @@
   <ItemGroup>
     <Compile Include="BuilderPlug.cs" />
     <Compile Include="BuilderPlug.Build.cs" />
+    <Compile Include="BuilderPlug.Chat.cs" />
+    <Compile Include="Chat\ChatPanel.cs" />
+    <Compile Include="Chat\ChatSession.cs" />
     <Compile Include="BuilderPlug.Check.cs" />
     <Compile Include="BuilderPlug.Mcp.cs" />
     <Compile Include="BuilderPlug.Src.cs" />

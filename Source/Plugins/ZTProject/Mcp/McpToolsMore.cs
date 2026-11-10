@@ -130,6 +130,38 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				return r;
 			});
 
+			Add("chat_start", "Чат Claude в UDB: запустить сеанс (новый или resume — id прежней сессии). command — команда на машине вместо " +
+			    "настоящего Claude Code (проверка).", Schema("resume", "string", "id сессии", "command", "string", "команда на машине"), true, a =>
+			{
+				plug.chatcommand = Str(a, "command");
+				string r = plug.StartChat(Str(a, "resume"));
+				return r == null ? ToolResult.Text("сеанс запускается") : ToolResult.Error(r);
+			});
+
+			Add("chat_send", "Чат Claude в UDB: отправить сообщение, как с клавиатуры панели.", Schema("text!", "string", "текст"), true, a =>
+				plug.ChatPanelForMcp.SendText(Str(a, "text")) ? ToolResult.Text("отправлено") : ToolResult.Error("сеанс не готов (не подключён или Claude думает)"));
+
+			Add("chat_answer", "Чат Claude в UDB: ответить на запрос разрешения («Разрешить» / «Отклонить»).",
+			    Schema("allow!", "boolean", "разрешить"), true, a =>
+			{
+				if(!plug.ChatPanelForMcp.PermissionPending) return ToolResult.Error("запроса разрешения нет");
+				plug.ChatPanelForMcp.AnswerPermission(Bool(a, "allow", false));
+				return ToolResult.Text("ответ отправлен");
+			});
+
+			Add("chat_log", "Чат Claude в UDB: текст панели (последние chars символов), состояние сеанса.",
+			    Schema("chars", "integer", "сколько символов с конца, по умолчанию 3000"), false, a =>
+			{
+				string t = plug.ChatPanelForMcp.Transcript;
+				int n = Int(a, "chars", 3000);
+				Chat.ChatSession s = plug.ChatForMcp;
+				return ToolResult.Json(new Dictionary<string, object>
+				{
+					{ "running", s != null && s.Running }, { "busy", s != null && s.Busy }, { "session", s != null ? s.SessionId : null },
+					{ "permission_pending", plug.ChatPanelForMcp.PermissionPending }, { "text", t.Length > n ? t.Substring(t.Length - n) : t }
+				});
+			});
+
 			Add("zt_test_map", "Плагин ZT: тест открытой карты в игре — GZDoom в порядке ZeroTolerance.bat, src/ вместо собранного pk3, " +
 			    "карта из UDB со скомпилированными скриптами. Игра открывается на экране пользователя. В ответе — лог GZDoom.",
 			    Schema(), true, a =>

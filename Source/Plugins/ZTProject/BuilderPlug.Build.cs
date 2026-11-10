@@ -267,7 +267,9 @@ echo ""ZTCOMMIT $(git log -1 --format='%h %s')""
 				Task<string> outp = p.StandardOutput.ReadToEndAsync();
 				if(stdin != null)
 				{
-					p.StandardInput.Write(stdin.Replace("\r\n", "\n"));
+					// UTF-8 байтами: StandardInput .NET Framework пишет в кодовой странице консоли и портит кириллицу
+					byte[] b = Encoding.UTF8.GetBytes(stdin.Replace("\r\n", "\n"));
+					p.StandardInput.BaseStream.Write(b, 0, b.Length);
 					p.StandardInput.Close();
 				}
 				if(!p.WaitForExit(timeoutms))

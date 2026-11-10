@@ -67,10 +67,12 @@ namespace CodeImp.DoomBuilder.ZTProject
 			InitBuild();
 			InitSrc();
 			InitMcp();
+			InitChat();
 		}
 
 		public override void Dispose()
 		{
+			DisposeChat();
 			DisposeMcp();
 			DisposeSrc();
 			StopWatch();
