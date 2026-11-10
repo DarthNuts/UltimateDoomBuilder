@@ -97,6 +97,22 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 			}).ToList();
 		}
 
+		// Куда инструменты могут писать картинки (save_to): только .png во временной папке или в ZTWorkbench — иначе инструмент
+		// «только для чтения» (разрешённый Claude в чате заранее) мог бы перезаписать любой файл пользователя
+		private static string SafeOut(string path)
+		{
+			string full = Path.GetFullPath(path);
+			string[] roots = { Path.GetFullPath(Path.GetTempPath()), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZTWorkbench") };
+			if(!string.Equals(Path.GetExtension(full), ".png", StringComparison.OrdinalIgnoreCase) ||
+			   !roots.Any(r => full.StartsWith(r.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)))
+				throw new ArgumentException("save_to — только .png во временной папке (" + roots[0] + ") или в " + roots[1]);
+			Directory.CreateDirectory(Path.GetDirectoryName(full));
+			return full;
+		}
+
+		// Инструменты только для чтения (чат: разрешены Claude заранее, без вопроса)
+		public IEnumerable<string> ReadOnlyNames() { return tools.Where(t => !t.Writes).Select(t => t.Name); }
+
 		public ToolResult Call(string name, Dictionary<string, object> args, McpMode mode)
 		{
 			Tool t = tools.FirstOrDefault(x => x.Name == name);
@@ -395,7 +411,7 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				byte[] png = UiAutomation.Capture(Str(a, "window"));
 				ToolResult r = new ToolResult();
 				string path = Str(a, "save_to");
-				if(!string.IsNullOrEmpty(path)) { File.WriteAllBytes(path, png); r.Content.Add(ToolResult.TextItem("сохранено: " + path)); }
+				if(!string.IsNullOrEmpty(path)) { File.WriteAllBytes(SafeOut(path), png); r.Content.Add(ToolResult.TextItem("сохранено: " + path)); }
 				r.Content.Add(new Dictionary<string, object> { { "type", "image" }, { "mimeType", "image/png" }, { "data", Convert.ToBase64String(png) } });
 				return r;
 			});

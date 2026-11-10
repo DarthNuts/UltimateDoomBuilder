@@ -104,7 +104,9 @@ ZT → «Чат с Claude» — панель-докер «Чат Claude» (сп�
   сеанса включается сам.
 - **Перед запуском** плагин пишет на машину `~/.zt/udb-mcp.json` (адрес и токен MCP, права 600 — порт на localhost
   машины видят все её пользователи) и `~/.zt/chat.sh` (запуск Claude Code: `claude` из PATH или копия Claude Desktop
-  `~/.claude/remote/ccd-cli/*`, `--permission-mode acceptEdits`, разрешения — `--permission-prompt-tool stdio`).
+  `~/.claude/remote/ccd-cli/*`, `--permission-mode acceptEdits`, разрешения — `--permission-prompt-tool stdio`, только MCP `udb` — `--strict-mcp-config`;
+  инструменты UDB только для чтения разрешены заранее — `--allowedTools`, правки и действия спрашивают).
+  `save_to` у `screenshot`/`render_2d` пишет только .png во временную папку или `%LOCALAPPDATA%\ZTWorkbench`.
 - **Панель:** ответ потоком, шаги («⚙ Bash: …», «⚙ mcp__udb__map_info»), запросы разрешений — «Разрешить» /
   «Отклонить», «Стоп» — прервать ход (сеанс остаётся), «Новый чат», «Продолжить» — прежняя сессия (`--resume`), «Получить» — забрать правки Claude; «Выделенное» —
   номера выделенных на карте элементов в запрос; «Сначала отправить мои правки» (включено) — перед запросом

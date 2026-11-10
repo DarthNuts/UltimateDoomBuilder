@@ -125,7 +125,7 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				byte[] png = MapRender.Render(hl, rect, margin, Int(a, "width", 1200), Bool(a, "labels", true), Bool(a, "things", true));
 				ToolResult r = new ToolResult();
 				string path = Str(a, "save_to");
-				if(!string.IsNullOrEmpty(path)) { System.IO.File.WriteAllBytes(path, png); r.Content.Add(ToolResult.TextItem("сохранено: " + path)); }
+				if(!string.IsNullOrEmpty(path)) { System.IO.File.WriteAllBytes(SafeOut(path), png); r.Content.Add(ToolResult.TextItem("сохранено: " + path)); }
 				r.Content.Add(new Dictionary<string, object> { { "type", "image" }, { "mimeType", "image/png" }, { "data", Convert.ToBase64String(png) } });
 				return r;
 			});

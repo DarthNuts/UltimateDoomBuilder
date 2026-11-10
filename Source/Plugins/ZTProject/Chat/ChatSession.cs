@@ -26,7 +26,9 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 		public event Action<string> TextDelta;                                // кусок ответа по мере набора
 		public event Action<string, string> ToolUse;                          // инструмент, кратко что делает
 		public event Action<string, string, Dictionary<string, object>> PermissionRequest;   // id запроса, инструмент, ввод
-		public event Action<string, bool, double> TurnFinished;               // итог хода, ошибка, стоимость
+		public event Action<string, bool, double> TurnFinished;               // итог хода, ошибка, длительность (с)
+		public event Action<string> Ready;                                    // Claude Code запущен
+		private volatile bool ready;
 		public event Action<string> Info;                                     // служебное: stderr, состояние
 		public event Action<int> Exited;                                      // процесс завершился (код)
 
@@ -181,12 +183,22 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 				case "system":
 					if(S(m, "subtype") == "init")
 					{
+						// init приходит перед каждым ходом: о сессии и MCP сообщать один раз
+						bool first = SessionId == null;
 						SessionId = S(m, "session_id");
+						if(!first) break;
 						Raise(SessionStarted, SessionId);
 						foreach(Dictionary<string, object> srv in L(m, "mcp_servers").OfType<Dictionary<string, object>>())
 							Raise(Info, "MCP " + S(srv, "name") + ": " + S(srv, "status"));
 					}
 					break;
+
+				case "control_response":
+				{
+					// ответ на initialize — Claude Code запущен и принимает сообщения (сессия появится с первым ходом)
+					if(!ready) { ready = true; Raise(Ready, ""); }
+					break;
+				}
 
 				case "stream_event":
 				{
@@ -221,10 +233,10 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 				case "result":
 				{
 					Busy = false;
-					object cost, err;
-					double c = m.TryGetValue("total_cost_usd", out cost) && cost != null ? Convert.ToDouble(cost, System.Globalization.CultureInfo.InvariantCulture) : 0;
+					object dur, err;
+					double seconds = m.TryGetValue("duration_ms", out dur) && dur != null ? Convert.ToDouble(dur, System.Globalization.CultureInfo.InvariantCulture) / 1000 : 0;
 					bool e = m.TryGetValue("is_error", out err) && err is bool && (bool)err;
-					Raise(TurnFinished, S(m, "result") ?? "", e, c);
+					Raise(TurnFinished, S(m, "result") ?? "", e, seconds);
 					break;
 				}
 			}

@@ -115,11 +115,12 @@ namespace CodeImp.DoomBuilder.ZTProject
 			chat.TextDelta += t => Ui(() => { if(me == chat) chatpanel.Text(t); });
 			chat.ToolUse += (n, w) => Ui(() => { if(me == chat) chatpanel.Tool(n, w); });
 			chat.PermissionRequest += (id, tool, input) => Ui(() => { if(me == chat) chatpanel.AskPermission(id, tool, ChatSession.Summary(tool, input), input); });
-			chat.TurnFinished += (text, error, cost) => Ui(() =>
+			chat.Ready += x => Ui(() => { if(me == chat && chat.SessionId == null) chatpanel.SetStatus("готово — пишите запрос", true, false); });
+			chat.TurnFinished += (text, error, seconds) => Ui(() =>
 			{
 				if(me != chat) return;
-				if(error) chatpanel.Error(text);
-				chatpanel.TurnEnd(cost > 0 ? string.Format(CultureInfo.InvariantCulture, "— ход завершён (${0:0.####})", cost) : "— ход завершён");
+				if(error) chatpanel.Error(text.Length > 0 ? text : "ход прерван");     // «Стоп»: error_during_execution без текста
+				chatpanel.TurnEnd(seconds > 0 ? string.Format(CultureInfo.InvariantCulture, "— ход завершён за {0:0} с", seconds) : "— ход завершён");
 				chatpanel.SetStatus("сессия " + chat.SessionId, true, false);
 			});
 			chat.Info += t => Ui(() => { if(me == chat) chatpanel.Note(t); });
@@ -188,7 +189,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 			       "C=$(command -v claude || ls -1t \"$HOME\"/.local/bin/claude \"$HOME\"/.claude/remote/ccd-cli/* 2>/dev/null | head -1)\n" +
 			       "[ -n \"$C\" ] || { echo '{\"type\":\"result\",\"is_error\":true,\"result\":\"на машине не найден Claude Code\"}'; exit 1; }\n" +
 			       "exec \"$C\" -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages \\\n" +
-			       "  --permission-prompt-tool stdio --permission-mode acceptEdits --mcp-config \"$HOME/.zt/udb-mcp.json\" \\\n" +
+			       "  --permission-prompt-tool stdio --permission-mode acceptEdits --mcp-config \"$HOME/.zt/udb-mcp.json\" --strict-mcp-config \\\n" +
+			       "  --allowedTools \"" + string.Join(",", mcptools.ReadOnlyNames().Select(n => "mcp__udb__" + n)) + "\" \\\n" +
 			       "  --append-system-prompt \"" + prompt + "\" \"$@\"\n" +
 			       "ZTEOF\n" +
 			       "chmod 700 ~/.zt/chat.sh\n" +
