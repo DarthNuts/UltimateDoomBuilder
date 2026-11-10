@@ -144,6 +144,22 @@ namespace CodeImp.DoomBuilder.ZTProject
 			return lumps;
 		}
 
+		// Отпечаток файлов карты (для слежения: изменились ли они с последней сверки)
+		public string Fingerprint()
+		{
+			using(SHA1 sha = SHA1.Create())
+			{
+				foreach(KeyValuePair<string, byte[]> l in ReadLumps())
+				{
+					byte[] name = Encoding.ASCII.GetBytes(l.Key + "\0" + l.Value.Length + "\0");
+					sha.TransformBlock(name, 0, name.Length, null, 0);
+					sha.TransformBlock(l.Value, 0, l.Value.Length, null, 0);
+				}
+				sha.TransformFinalBlock(new byte[0], 0, 0);
+				return BitConverter.ToString(sha.Hash);
+			}
+		}
+
 		// Собирает временный WAD карты из файлов wad-src/
 		public void BuildWad()
 		{

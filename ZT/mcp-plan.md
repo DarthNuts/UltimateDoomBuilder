@@ -24,7 +24,13 @@
   `screenshot` (новое: без них модальные окна плагина агенту не проверить); `run_action`, `undo`/`redo`;
   `zt_set_project`, `zt_open_map`, `zt_reload_map`.
 - `map_revision` — счётчик шагов отмены, откатов, повторов и открытий карты (правки внутри одного шага он не видит).
-- Дальше по плану: `config_catalog`, `scripts_*`, `map_analysis`, правка полей (`set_fields`) с ревизией, `render_2d`.
+- `set_fields` — поля TEXTMAP по номерам (с `expect_revision`) или по условию `where`, одним шагом отмены. Правка идёт
+  через тот же перенос разницы, что перечитывание карты на месте (`MapReload.ApplyText`): медленнее прямой записи
+  свойств (~3 с на MAP01), зато любое поле TEXTMAP и проверка результата байт в байт.
+- `udmf_schema` — порядок полей TEXTMAP, как их пишет UDB, с флагами из игровой конфигурации (для скриптов мода).
+- `zt_open_map` и `run_action` не ждут модальных окон дольше `wait_ms`: если UDB показал окно (Errors and Warnings,
+  вопрос), ответ — список окон, дальше `ui_click`.
+- Дальше по плану: `config_catalog`, `scripts_*`, `map_analysis`, `render_2d`.
 
 ## 1. Что показал опыт
 

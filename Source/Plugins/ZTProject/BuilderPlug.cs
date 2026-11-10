@@ -69,6 +69,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 		public override void Dispose()
 		{
 			DisposeMcp();
+			StopWatch();
+			if(watchtimer != null) { watchtimer.Dispose(); watchtimer = null; }
 			if(branchtimer != null) { branchtimer.Stop(); branchtimer.Dispose(); branchtimer = null; }
 			if(branchlabel != null) General.MainWindow.RemoveStatusItem(branchlabel);
 			if(branchseparator != null) General.MainWindow.RemoveStatusItem(branchseparator);
@@ -152,6 +154,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 			ProjectMap pm;
 			current = (General.Map != null && !string.IsNullOrEmpty(General.Map.FilePathName) &&
 			           projectmaps.TryGetValue(Path.GetFullPath(General.Map.FilePathName), out pm)) ? pm : null;
+			WatchMap();
 			if(current != null)
 				General.Interface.DisplayStatus(StatusType.Info, "ZT: карта " + current.MapName + " из " + current.ProjectDir + "\\" + current.MapFolder.Replace('/', '\\'));
 		}
@@ -160,6 +163,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 		{
 			base.OnMapCloseEnd();
 			Mcp.McpTools.Revision++;
+			StopWatch();
 			current = null;
 		}
 
@@ -172,6 +176,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 			try
 			{
 				List<string> changed = current.ExportFromWad();
+				SyncWatch();
 				General.WriteLogLine("ZT: карта " + current.MapName + " записана в wad-src: " + (changed.Count > 0 ? string.Join(", ", changed) : "без изменений"));
 			}
 			catch(Exception ex)
@@ -221,6 +226,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 		{
 			string dir = EnsureProjectDir();
 			if(dir == null || !SaveProjectMap()) return;
+			busy++;
 			try
 			{
 				Cursor.Current = Cursors.WaitCursor;
@@ -256,6 +262,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 			}
 			finally
 			{
+				busy--;
+				SyncWatch();
 				Cursor.Current = Cursors.Default;
 			}
 		}
@@ -265,6 +273,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 		{
 			string dir = EnsureProjectDir();
 			if(dir == null || !SaveProjectMap()) return;
+			busy++;
 			try
 			{
 				Cursor.Current = Cursors.WaitCursor;
@@ -276,6 +285,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 			}
 			finally
 			{
+				busy--;
+				SyncWatch();
 				Cursor.Current = Cursors.Default;
 			}
 		}

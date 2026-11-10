@@ -38,6 +38,7 @@
   <ItemGroup>
     <Compile Include="BuilderPlug.cs" />
     <Compile Include="BuilderPlug.Mcp.cs" />
+    <Compile Include="BuilderPlug.Watch.cs" />
     <Compile Include="Dialogs.cs" />
     <Compile Include="Git.cs" />
     <Compile Include="MapConflicts.cs" />

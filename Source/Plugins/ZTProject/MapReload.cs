@@ -28,6 +28,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 		public int Changed, Added, Deleted, Moved;
 		public bool MapChanged;
+		public bool Started;     // шаг отмены уже создан (перенос начался)
 		public readonly List<string> Lumps = new List<string>();
 
 		#endregion
@@ -96,6 +97,31 @@ namespace CodeImp.DoomBuilder.ZTProject
 			return r;
 		}
 
+		// Правка карты по образцу TEXTMAP (MCP set_fields): разница — одним шагом отмены, карта остаётся изменённой.
+		// Не вышло после начала переноса — шаг отменяется. null — не вышло (причина — в why).
+		public static MapReload ApplyText(byte[] textmap, string description, out string why)
+		{
+			why = null;
+			MapReload r = new MapReload();
+			MapSet incoming = ZTMapTools.ReadUdmf(textmap);
+			try
+			{
+				byte[] incbytes = ZTMapTools.WriteUdmf(incoming);
+				byte[] curbytes = ZTMapTools.WriteUdmf(General.Map.Map);
+				if(curbytes.SequenceEqual(incbytes)) return r;
+				if(!ApplyTextmap(r, General.Map.Map, incoming, curbytes, incbytes, description, out why))
+				{
+					if(r.Started) General.Map.UndoRedo.PerformUndo();
+					return null;
+				}
+				return r;
+			}
+			finally
+			{
+				ZTMapTools.Discard(incoming);
+			}
+		}
+
 		// Разница TEXTMAP — в карту одним шагом отмены. Писатель UDB пишет элементы по порядку номеров, поэтому номер блока
 		// в тексте — это номер элемента в MapSet (и у карты UDB, и у прочитанной новой версии).
 		private static bool ApplyTextmap(MapReload r, MapSet map, MapSet inc, byte[] curbytes, byte[] incbytes, string description, out string why)
@@ -126,6 +152,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 			bool ok = false;
 			ZTMapTools.BeginExternalChange(description);
+			r.Started = true;
 			bool autoremove = ZTMapTools.SetAutoRemove(map, false);
 			try
 			{

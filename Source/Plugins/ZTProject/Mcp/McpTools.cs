@@ -60,7 +60,7 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 
 		public const string Instructions =
 			"Сервер Ultimate Doom Builder (форк Zero Tolerance). Карта, открытая в UDB: map_info, get_elements, query_elements, " +
-			"get_selection, select. Окна UDB: ui_windows, ui_click, ui_select_rows, ui_set_text, screenshot. Действия UDB и плагина " +
+			"get_selection, select; правка полей — set_fields. Окна UDB: ui_windows, ui_click, ui_select_rows, ui_set_text, screenshot. Действия UDB и плагина " +
 			"ZT: run_action (например ztproject_ztget — «Получить»), undo/redo, zt_set_project, zt_open_map, zt_reload_map. " +
 			"Номера элементов и имена полей — как в TEXTMAP; значения — литералы TEXTMAP (строки в кавычках). " +
 			"Действие, открывшее модальное окно, продолжается в UDB: смотрите ui_windows и нажимайте кнопки ui_click.";
@@ -191,6 +191,14 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 			return d;
 		}
 
+		// Значение из JSON -> литерал TEXTMAP
+		private static string Literal(object v)
+		{
+			if(v is bool) return (bool)v ? "true" : "false";
+			if(v is string) return "\"" + ((string)v).Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+			return Convert.ToString(v, CultureInfo.InvariantCulture);
+		}
+
 		// Сравнение значения TEXTMAP с заданным: числа — численно, строки — без кавычек
 		private static bool Matches(string literal, object wanted)
 		{
@@ -279,6 +287,102 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				return ToolResult.Text("выделено: " + n);
 			});
 
+			Add("set_fields", "Задать поля TEXTMAP у элементов (одним шагом отмены, Ctrl+Z откатывает). Элементы — по номерам " +
+			    "(нужен expect_revision из последнего ответа: карта могла измениться) или по условию where. Значения: строка — " +
+			    "строковое поле (\"FLAT1\"), число, true/false; null — удалить поле. Ссылки v1/v2/sidefront/sideback/sector не меняются.",
+			    Schema("type!", "string", "vertex | linedef | sidedef | sector | thing",
+			           "fields!", "object", "поле -> значение, например {\"lightlevel\": 160, \"user_ztdoor\": null}",
+			           "indices", "integer[]", "номера элементов",
+			           "expect_revision", "integer", "revision из ответа, по которому выбраны номера",
+			           "where", "object", "условие, как у query_elements"), true, a =>
+			{
+				string type = Type(a);
+				Dictionary<string, object> fields = Arg(a, "fields") as Dictionary<string, object>;
+				if(fields == null || fields.Count == 0) throw new ArgumentException("fields — какие поля задать");
+				foreach(string k in fields.Keys)
+					if(k == "v1" || k == "v2" || k == "sidefront" || k == "sideback" || k == "sector")
+						throw new ArgumentException("ссылку " + k + " этим инструментом не менять");
+				UdmfMap snap = Snapshot();
+				List<UdmfBlock> list = snap.Of(type);
+				List<int> targets;
+				Dictionary<string, object> where = Arg(a, "where") as Dictionary<string, object>;
+				if(Arg(a, "indices") != null)
+				{
+					if(Arg(a, "expect_revision") == null || Int(a, "expect_revision", -1) != Revision)
+						throw new InvalidOperationException("карта изменилась (revision " + Revision + ") — перезапросите номера");
+					targets = Ints(a, "indices");
+					foreach(int i in targets) if(i < 0 || i >= list.Count) throw new ArgumentException("нет " + type + " " + i);
+				}
+				else if(where != null)
+					targets = Enumerable.Range(0, list.Count).Where(i => where.All(w => Matches(list[i].Get(w.Key), w.Value))).ToList();
+				else throw new ArgumentException("нужны indices (с expect_revision) или where");
+				if(targets.Count == 0) return ToolResult.Json(new Dictionary<string, object> { { "changed", 0 }, { "revision", Revision } });
+
+				foreach(int i in targets)
+					foreach(KeyValuePair<string, object> f in fields)
+						if(f.Value == null) list[i].Remove(f.Key); else list[i].Set(f.Key, Literal(f.Value));
+				string why;
+				MapReload r = MapReload.ApplyText(Bytes.GetBytes(snap.Write()), "MCP: set_fields " + type, out why);
+				if(r == null) return ToolResult.Error("правка не применена: " + why);
+				return ToolResult.Json(new Dictionary<string, object>
+				{
+					{ "targets", targets.Count }, { "changed", r.Changed }, { "revision", Revision }, { "changed_map", General.Map.IsChanged }
+				});
+			});
+
+			Add("udmf_schema", "Порядок полей TEXTMAP, как их пишет UDB при сохранении (UniversalStreamWriter): по типам элементов — " +
+			    "обычные поля по порядку (с типом и значением по умолчанию, которое UDB не пишет), затем флаги в порядке игровой " +
+			    "конфигурации (пишутся только true), затем пользовательские поля — в порядке файла. Для скриптов, которые пишут TEXTMAP.",
+			    Schema(), false, a =>
+			{
+				NeedMap();
+				CodeImp.DoomBuilder.Config.GameConfiguration cfg = General.Map.Config;
+				Func<object[][], List<object>> fields = rows => rows.Select(r => (object)new Dictionary<string, object>
+				{
+					{ "key", r[0] }, { "type", r[1] }, { "default", r[2] }
+				}).ToList();
+				Func<IEnumerable<string>, List<object>> uniq = keys => keys.Distinct().Select(k => (object)k).ToList();
+				object[][] args = { new object[] { "special", "int", 0 }, new object[] { "arg0", "int", 0 }, new object[] { "arg1", "int", 0 },
+				                    new object[] { "arg2", "int", 0 }, new object[] { "arg3", "int", 0 }, new object[] { "arg4", "int", 0 } };
+				return ToolResult.Json(new Dictionary<string, object>
+				{
+					{ "config", General.Map.ConfigSettings.Name },
+					{ "note", "default null — поле пишется всегда (если есть); double — формат 0.0##############" },
+					{ "vertex", new Dictionary<string, object> {
+						{ "fields", fields(new[] { new object[] { "x", "double", null }, new object[] { "y", "double", null },
+						                           new object[] { "zceiling", "double", "NaN" }, new object[] { "zfloor", "double", "NaN" } }) },
+						{ "flags", new List<object>() } } },
+					{ "linedef", new Dictionary<string, object> {
+						{ "fields", fields(new[] { new object[] { "id", "int", 0 }, new object[] { "v1", "int", null }, new object[] { "v2", "int", null },
+						                           new object[] { "moreids", "string", "" }, new object[] { "sidefront", "int", null },
+						                           new object[] { "sideback", "int", -1 } }.Concat(args).ToArray()) },
+						{ "flags", uniq(cfg.LinedefFlags.Keys.Concat(cfg.LinedefFlagsTranslation.SelectMany(f => f.Fields))
+						                .Concat(cfg.LinedefActivates.Select(x => x.Key))) } } },
+					{ "sidedef", new Dictionary<string, object> {
+						{ "fields", fields(new[] { new object[] { "offsetx", "int", 0 }, new object[] { "offsety", "int", 0 },
+						                           new object[] { "texturetop", "string", "-" }, new object[] { "texturebottom", "string", "-" },
+						                           new object[] { "texturemiddle", "string", "-" }, new object[] { "sector", "int", null } }) },
+						{ "flags", uniq(cfg.SidedefFlags.Keys) } } },
+					{ "sector", new Dictionary<string, object> {
+						{ "fields", fields(new[] { new object[] { "heightfloor", "int", null }, new object[] { "heightceiling", "int", null },
+						                           new object[] { "texturefloor", "string", null }, new object[] { "textureceiling", "string", null },
+						                           new object[] { "lightlevel", "int", null }, new object[] { "special", "int", 0 }, new object[] { "id", "int", 0 },
+						                           new object[] { "moreids", "string", "" },
+						                           new object[] { "floorplane_a", "double", null }, new object[] { "floorplane_b", "double", null },
+						                           new object[] { "floorplane_c", "double", null }, new object[] { "floorplane_d", "double", null },
+						                           new object[] { "ceilingplane_a", "double", null }, new object[] { "ceilingplane_b", "double", null },
+						                           new object[] { "ceilingplane_c", "double", null }, new object[] { "ceilingplane_d", "double", null } }) },
+						{ "flags", uniq(cfg.SectorFlags.Keys.Concat(cfg.CeilingPortalFlags.Keys).Concat(cfg.FloorPortalFlags.Keys)) } } },
+					{ "thing", new Dictionary<string, object> {
+						{ "fields", fields(new[] { new object[] { "id", "int", 0 }, new object[] { "x", "double", null }, new object[] { "y", "double", null },
+						                           new object[] { "height", "double", 0 }, new object[] { "angle", "int", null },
+						                           new object[] { "pitch", "int", 0 }, new object[] { "roll", "int", 0 },
+						                           new object[] { "scalex", "double", 1 }, new object[] { "scaley", "double", 1 },
+						                           new object[] { "type", "int", null } }.Concat(args).ToArray()) },
+						{ "flags", uniq(cfg.ThingFlags.Keys.Concat(cfg.ThingFlagsTranslation.SelectMany(f => f.Fields))) } } }
+				});
+			});
+
 			Add("ui_windows", "Открытые окна UDB: формы (кнопки, надписи, поля, списки со строками) и стандартные окна Windows " +
 			    "(MessageBox). Главное окно — только заголовок.", Schema(), false, a => ToolResult.Json(UiAutomation.Windows()));
 
@@ -341,11 +445,13 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 
 			tools.Add(new Tool
 			{
-				Name = "zt_open_map", Writes = true, Timeout = 120000,
+				Name = "zt_open_map", Writes = true, OwnThread = true,
 				Description = "Плагин ZT: открыть карту проекта из wad-src/ без окна параметров (игровая конфигурация и ресурсы — из " +
-				              ".dbs этой карты или той же карты другой рабочей копии). Несохранённые правки открытой карты не сохраняются.",
-				Schema = Schema("map!", "string", "имя карты, например MAP01"),
-				Run = a => ToolResult.Text(plug.McpOpenMap(Str(a, "map")))
+				              ".dbs этой карты или той же карты другой рабочей копии). Карту с несохранёнными правками не закрывает. Если UDB " +
+				              "после загрузки показал окно (Errors and Warnings), возвращает список окон — закрыть ui_click.",
+				Schema = Schema("map!", "string", "имя карты, например MAP01",
+				                "wait_ms", "integer", "сколько ждать, по умолчанию 120000"),
+				Run = a => RunUiAsync("zt_open_map", () => plug.McpOpenMap(Str(a, "map")), Int(a, "wait_ms", 120000))
 			});
 
 			tools.Add(new Tool
@@ -373,21 +479,30 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 			if(timedout) return ToolResult.Error("UDB занят (открыто модальное окно?) — ui_windows");
 			if(full == null) return ToolResult.Error("нет действия «" + name + "»");
 
+			return RunUiAsync(full, () => { General.Actions.InvokeAction(full); return "выполнено"; }, wait);
+		}
+
+		// Работа в потоке интерфейса без ожидания дольше wait мс: она может открыть модальное окно и ждать человека (или ui_click).
+		// Не дождались — ответ со списком окон; работа в UDB продолжается.
+		private static ToolResult RunUiAsync(string what, Func<string> f, int wait)
+		{
 			System.Threading.ManualResetEvent done = new System.Threading.ManualResetEvent(false);
 			Exception error = null;
+			string result = null;
 			General.MainWindow.BeginInvoke((MethodInvoker)delegate
 			{
-				try { General.Actions.InvokeAction(full); }
+				try { result = f(); }
 				catch(Exception ex) { error = ex; }
 				finally { done.Set(); }
 			});
 			bool finished = done.WaitOne(Math.Max(0, wait));
-			if(error != null) return ToolResult.Error(full + ": " + error.Message);
+			if(error != null) return ToolResult.Error(what + ": " + error.Message);
+			bool timedout;
 			object windows = McpServer.OnUi(() => UiAutomation.Windows(), 10000, out timedout);
 			return ToolResult.Json(new Dictionary<string, object>
 			{
-				{ "action", full }, { "finished", finished },
-				{ "note", finished ? "выполнено" : "ещё выполняется — скорее всего, ждёт ответа в окне (ui_windows, ui_click)" },
+				{ "action", what }, { "finished", finished },
+				{ "result", finished ? result : "ещё выполняется — скорее всего, ждёт ответа в окне (ui_windows, ui_click)" },
 				{ "windows", windows }
 			});
 		}

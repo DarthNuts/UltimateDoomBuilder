@@ -89,12 +89,13 @@ namespace CodeImp.DoomBuilder.ZTProject
 			using(RandomNumberGenerator rng = RandomNumberGenerator.Create()) rng.GetBytes(b);
 			token = BitConverter.ToString(b).Replace("-", "").ToLowerInvariant();
 			General.Settings.WritePluginSetting("mcptoken", token);
+			General.SaveSettings();     // токен уже отдан агентам — не потерять при сбое UDB
 			return token;
 		}
 
 		private void SetMcpMode(McpMode mode, bool save)
 		{
-			if(save) General.Settings.WritePluginSetting("mcpmode", (int)mode);
+			if(save) { General.Settings.WritePluginSetting("mcpmode", (int)mode); General.SaveSettings(); }
 			if(mode == McpMode.Off) StopMcp();
 			else if(mcp != null) { mcp.Mode = mode; WriteMcpFile(); }
 			else
