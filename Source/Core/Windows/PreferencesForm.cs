@@ -22,6 +22,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using CodeImp.DoomBuilder.Actions;
+using CodeImp.DoomBuilder.Controls;
 using System.Globalization;
 using System.IO;
 using CodeImp.DoomBuilder.Rendering;
@@ -134,6 +135,14 @@ namespace CodeImp.DoomBuilder.Windows
 			scriptshowfolding.Checked = General.Settings.ScriptShowFolding; //mxd
 			scriptshowlinenumbers.Checked = General.Settings.ScriptShowLineNumbers; //mxd
 			scriptautoshowautocompletion.Checked = General.Settings.ScriptAutoShowAutocompletion; //mxd
+
+			// Script encoding
+			foreach(int codepage in ScriptEncodings.CodePages)
+				scriptdefaultencoding.Items.Add(ScriptEncodings.GetDisplayName(codepage));
+			scriptdefaultencoding.SelectedIndex = Math.Max(Array.IndexOf(ScriptEncodings.CodePages, ScriptEncodings.DefaultCodePage), 0);
+			scriptautodetectencoding.Checked = General.Settings.ScriptAutoDetectEncoding;
+			toolTip1.SetToolTip(scriptdefaultencoding, "Encoding of new scripts, and of scripts opened without auto-detection or containing only ASCII text");
+			toolTip1.SetToolTip(scriptautodetectencoding, "Open scripts with a UTF-8 BOM or valid UTF-8 text as UTF-8, other non-ASCII scripts as Windows-1251");
 
 			// Fill script fonts list
 			scriptfontname.BeginUpdate();
@@ -381,6 +390,8 @@ namespace CodeImp.DoomBuilder.Windows
 			General.Settings.ScriptShowFolding = scriptshowfolding.Checked; //mxd
 			General.Settings.ScriptShowLineNumbers = scriptshowlinenumbers.Checked; //mxd
 			General.Settings.ScriptAutoShowAutocompletion = scriptautoshowautocompletion.Checked; //mxd
+			General.Settings.ScriptDefaultEncoding = ScriptEncodings.CodePages[Math.Max(scriptdefaultencoding.SelectedIndex, 0)];
+			General.Settings.ScriptAutoDetectEncoding = scriptautodetectencoding.Checked;
 			
 			// Script font size
 			int fontsize;

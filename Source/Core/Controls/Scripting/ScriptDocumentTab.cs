@@ -278,6 +278,20 @@ namespace CodeImp.DoomBuilder.Controls
 			return false;
 		}
 		
+		// This re-reads the document in another encoding (see ScriptEditorControl.InterpretAs)
+		internal void InterpretAs(int codepage)
+		{
+			editor.InterpretAs(codepage);
+			UpdateTitle();
+		}
+
+		// This changes the encoding the document is saved in, keeping the text
+		internal void ConvertTo(int codepage)
+		{
+			editor.ConvertTo(codepage);
+			UpdateTitle();
+		}
+
 		// This changes the script configurations
 		public virtual void ChangeScriptConfig(ScriptConfiguration newconfig)
 		{

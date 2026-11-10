@@ -83,11 +83,12 @@ namespace CodeImp.DoomBuilder.Data.Scripting
 				RegexOptions ro = (options.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase);
 				Regex regex = new Regex(findtext, ro);
 				
-				using(StreamReader reader = new StreamReader(stream, ScriptEditorControl.Encoding))
+				using(StringReader reader = new StringReader(ScriptEncodings.Decode(stream.ToArray())))
 				{
-					while(!reader.EndOfStream)
+					string line;
+					while((line = reader.ReadLine()) != null)
 					{
-						if(regex.IsMatch(reader.ReadLine())) return true;
+						if(regex.IsMatch(line)) return true;
 					}
 				}
 			}
@@ -111,12 +112,12 @@ namespace CodeImp.DoomBuilder.Data.Scripting
 				string findtext = (options.WholeWord ? "\\b" + options.FindText + "\\b" : options.FindText);
 				Regex regex = new Regex(findtext, (options.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase));
 
-				using(StreamReader reader = new StreamReader(stream, ScriptEditorControl.Encoding))
+				using(StringReader reader = new StringReader(ScriptEncodings.Decode(stream.ToArray())))
 				{
 					int lineindex = 0;
-					while(!reader.EndOfStream)
+					string line;
+					while((line = reader.ReadLine()) != null)
 					{
-						string line = reader.ReadLine();
 						foreach(Match match in regex.Matches(line))
 							result.Add(new FindUsagesResult(this, match, line, lineindex));
 

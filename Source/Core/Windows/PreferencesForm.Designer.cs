@@ -177,6 +177,9 @@ namespace CodeImp.DoomBuilder.Windows
 			this.groupBox9 = new System.Windows.Forms.GroupBox();
 			this.scriptshowfolding = new System.Windows.Forms.CheckBox();
 			this.scriptshowlinenumbers = new System.Windows.Forms.CheckBox();
+			this.labelscriptencoding = new System.Windows.Forms.Label();
+			this.scriptdefaultencoding = new System.Windows.Forms.ComboBox();
+			this.scriptautodetectencoding = new System.Windows.Forms.CheckBox();
 			this.groupBox8 = new System.Windows.Forms.GroupBox();
 			this.scriptautoshowautocompletion = new System.Windows.Forms.CheckBox();
 			this.scriptusetabs = new System.Windows.Forms.CheckBox();
@@ -1957,6 +1960,9 @@ namespace CodeImp.DoomBuilder.Windows
 			// 
 			this.groupBox9.Controls.Add(this.scriptshowfolding);
 			this.groupBox9.Controls.Add(this.scriptshowlinenumbers);
+			this.groupBox9.Controls.Add(this.labelscriptencoding);
+			this.groupBox9.Controls.Add(this.scriptdefaultencoding);
+			this.groupBox9.Controls.Add(this.scriptautodetectencoding);
 			this.groupBox9.Location = new System.Drawing.Point(217, 260);
 			this.groupBox9.Name = "groupBox9";
 			this.groupBox9.Size = new System.Drawing.Size(457, 78);
@@ -1985,6 +1991,34 @@ namespace CodeImp.DoomBuilder.Windows
 			this.scriptshowlinenumbers.Text = "Show line numbers";
 			this.scriptshowlinenumbers.UseVisualStyleBackColor = true;
 			this.scriptshowlinenumbers.CheckedChanged += new System.EventHandler(this.scriptshowlinenumbers_CheckedChanged);
+			//
+			// labelscriptencoding
+			//
+			this.labelscriptencoding.AutoSize = true;
+			this.labelscriptencoding.Location = new System.Drawing.Point(200, 27);
+			this.labelscriptencoding.Name = "labelscriptencoding";
+			this.labelscriptencoding.Size = new System.Drawing.Size(91, 13);
+			this.labelscriptencoding.TabIndex = 2;
+			this.labelscriptencoding.Text = "Default encoding:";
+			//
+			// scriptdefaultencoding
+			//
+			this.scriptdefaultencoding.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+			this.scriptdefaultencoding.FormattingEnabled = true;
+			this.scriptdefaultencoding.Location = new System.Drawing.Point(294, 23);
+			this.scriptdefaultencoding.Name = "scriptdefaultencoding";
+			this.scriptdefaultencoding.Size = new System.Drawing.Size(150, 21);
+			this.scriptdefaultencoding.TabIndex = 3;
+			//
+			// scriptautodetectencoding
+			//
+			this.scriptautodetectencoding.AutoSize = true;
+			this.scriptautodetectencoding.Location = new System.Drawing.Point(203, 49);
+			this.scriptautodetectencoding.Name = "scriptautodetectencoding";
+			this.scriptautodetectencoding.Size = new System.Drawing.Size(165, 17);
+			this.scriptautodetectencoding.TabIndex = 4;
+			this.scriptautodetectencoding.Text = "Auto-detect encoding on open";
+			this.scriptautodetectencoding.UseVisualStyleBackColor = true;
 			// 
 			// groupBox8
 			// 
@@ -2990,6 +3024,9 @@ namespace CodeImp.DoomBuilder.Windows
 		private System.Windows.Forms.GroupBox groupBox9;
 		private System.Windows.Forms.CheckBox scriptshowfolding;
 		private System.Windows.Forms.CheckBox scriptshowlinenumbers;
+		private System.Windows.Forms.Label labelscriptencoding;
+		private System.Windows.Forms.ComboBox scriptdefaultencoding;
+		private System.Windows.Forms.CheckBox scriptautodetectencoding;
 		private System.Windows.Forms.CheckBox scriptautoshowautocompletion;
 		private CodeImp.DoomBuilder.Controls.ColorControl colorindicator;
 		private CodeImp.DoomBuilder.Controls.ScriptEditorPreviewControl scriptedit;

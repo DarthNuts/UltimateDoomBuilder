@@ -114,6 +114,8 @@ namespace CodeImp.DoomBuilder.Config
 		private bool scriptshowlinenumbers; //mxd
 		private bool scriptshowfolding; //mxd
 		private bool scriptautoshowautocompletion; //mxd
+		private int scriptdefaultencoding; // Code page for new scripts and scripts without detectable encoding
+		private bool scriptautodetectencoding; // Detect UTF-8 / legacy code page when opening scripts
 
 		//mxd. Text labels settings
 		private string textlabelfontname;
@@ -251,6 +253,8 @@ namespace CodeImp.DoomBuilder.Config
 		public bool ScriptShowLineNumbers { get { return scriptshowlinenumbers; } internal set { scriptshowlinenumbers = value; } } //mxd
 		public bool ScriptShowFolding { get { return scriptshowfolding; } internal set { scriptshowfolding = value; } } //mxd
 		public bool ScriptAutoShowAutocompletion { get { return scriptautoshowautocompletion; } internal set { scriptautoshowautocompletion = value; } } //mxd
+		public int ScriptDefaultEncoding { get { return scriptdefaultencoding; } internal set { scriptdefaultencoding = value; } }
+		public bool ScriptAutoDetectEncoding { get { return scriptautodetectencoding; } internal set { scriptautodetectencoding = value; } }
 
 		//mxd. Text labels settings
 		public string TextLabelFontName { get { return textlabelfontname; } internal set { textlabelfontname = value; } }
@@ -399,6 +403,8 @@ namespace CodeImp.DoomBuilder.Config
 				scriptshowlinenumbers = cfg.ReadSetting("scriptshowlinenumbers", true);
 				scriptshowfolding = cfg.ReadSetting("scriptshowfolding", true);
 				scriptautoshowautocompletion = cfg.ReadSetting("scriptautoshowautocompletion", true);
+				scriptdefaultencoding = cfg.ReadSetting("scriptdefaultencoding", 65001); // UTF-8
+				scriptautodetectencoding = cfg.ReadSetting("scriptautodetectencoding", true);
 
 				//mxd. Text labels
 				textlabelfontname = cfg.ReadSetting("textlabelfontname", "Microsoft Sans Serif");
@@ -547,6 +553,8 @@ namespace CodeImp.DoomBuilder.Config
 			cfg.WriteSetting("scriptshowlinenumbers", scriptshowlinenumbers);
 			cfg.WriteSetting("scriptshowfolding", scriptshowfolding);
 			cfg.WriteSetting("scriptautoshowautocompletion", scriptautoshowautocompletion);
+			cfg.WriteSetting("scriptdefaultencoding", scriptdefaultencoding);
+			cfg.WriteSetting("scriptautodetectencoding", scriptautodetectencoding);
 
 			//mxd. Text labels
 			cfg.WriteSetting("textlabelfontname", textlabelfontname);

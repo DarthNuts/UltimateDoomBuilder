@@ -124,7 +124,7 @@ namespace CodeImp.DoomBuilder.Controls
                     {
                         // Update what must be updated
                         hash = MD5Hash.Get(stream);
-                        editor.SetSavePoint();
+                        editor.SetSavePoint(stream.ToArray());
                         UpdateTitle();
                     }
                 }

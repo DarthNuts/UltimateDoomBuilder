@@ -219,6 +219,7 @@
     <Compile Include="Controls\Scripting\ScriptDocumentTab.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Controls\Scripting\ScriptEncodings.cs" />
     <Compile Include="Controls\Scripting\ScriptEditorPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>

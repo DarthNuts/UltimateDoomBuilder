@@ -122,7 +122,12 @@ namespace CodeImp.DoomBuilder.Controls
 		private int caretoffset; //mxd. Used to modify caret position after autogenerating stuff
 		private bool expandcodeblock; //mxd. More gross hacks
 		private string highlightedword; //mxd
-		private static Encoding encoding = Encoding.GetEncoding(1251); //mxd. ASCII with cyrillic support...
+
+		// Text encoding of the document (see ScriptEncodings)
+		private int codepage;
+		private bool writebom; // Write a UTF-8 BOM when saving (kept from the loaded data)
+		private bool encodingchanged; // Encoding was converted since the last save
+		private byte[] storeddata; // Data the document was last loaded from or saved as (for re-interpreting it)
 
 		//mxd. Event propagation
 		private bool preventchanges;
@@ -131,7 +136,9 @@ namespace CodeImp.DoomBuilder.Controls
 
 		#region ================== Properties
 
-		public bool IsChanged { get { return scriptedit.Modified; } }
+		public bool IsChanged { get { return scriptedit.Modified || encodingchanged; } }
+		public int CodePage { get { return codepage; } }
+		public bool WriteBom { get { return writebom; } }
 		public int SelectionStart { get { return scriptedit.SelectionStart; } set { scriptedit.SelectionStart = value; } }
 		public int SelectionEnd { get { return scriptedit.SelectionEnd; } set { scriptedit.SelectionEnd = value; } }
 		public new string Text { get { return scriptedit.Text; } set { scriptedit.Text = value; } } //mxd
@@ -139,7 +146,6 @@ namespace CodeImp.DoomBuilder.Controls
 		public bool ShowWhitespace { get { return scriptedit.ViewWhitespace != WhitespaceMode.Invisible; } set { scriptedit.ViewWhitespace = value ? WhitespaceMode.VisibleAlways : WhitespaceMode.Invisible; } }
 		public bool WrapLongLines { get { return scriptedit.WrapMode != WrapMode.None; } set { scriptedit.WrapMode = (value ? WrapMode.Char : WrapMode.None); } }
 		internal Scintilla Scintilla { get { return scriptedit; } } //mxd
-		internal static Encoding Encoding { get { return encoding; } } //mxd
 
 		#endregion
 
@@ -150,6 +156,7 @@ namespace CodeImp.DoomBuilder.Controls
 		{
 			// Initialize
 			InitializeComponent();
+			codepage = ScriptEncodings.DefaultCodePage;
 
 			// Script editor properties
 			//TODO: use ScintillaNET properties instead when they become available
@@ -573,6 +580,14 @@ namespace CodeImp.DoomBuilder.Controls
 		public void SetSavePoint()
 		{
 			scriptedit.SetSavePoint();
+			encodingchanged = false;
+		}
+
+		// This marks the current document as unmodified after it was stored as the given data
+		public void SetSavePoint(byte[] saveddata)
+		{
+			SetSavePoint();
+			storeddata = saveddata;
 		}
 
 		// Perform cut
@@ -599,14 +614,63 @@ namespace CodeImp.DoomBuilder.Controls
 			scriptedit.Focus();
 		}
 
+		// Returns the document text encoded in the document's encoding
 		public byte[] GetText()
 		{
-			return encoding.GetBytes(scriptedit.Text); //mxd TODO: other encodings?..
+			return ScriptEncodings.Encode(scriptedit.Text, codepage, writebom);
 		}
 
+		// Sets the document text from data, detecting its encoding
 		public void SetText(byte[] text)
 		{
-			scriptedit.Text = encoding.GetString(text); //mxd TODO: other encodings?..
+			codepage = ScriptEncodings.Detect(text, out writebom);
+			encodingchanged = false;
+			storeddata = text;
+			scriptedit.Text = ScriptEncodings.Decode(text, codepage);
+		}
+
+		// Re-reads the document in another encoding (for data that was opened in the wrong one).
+		// An unmodified document is re-read from the data it was loaded from or saved as,
+		// a modified one from its current text in the current encoding. Clears the undo history.
+		public void InterpretAs(int newcodepage)
+		{
+			if(newcodepage == codepage) return;
+
+			bool modified = IsChanged;
+			byte[] data = (!modified && storeddata != null ? storeddata : GetText());
+			int firstline = scriptedit.FirstVisibleLine;
+			int caretline = scriptedit.CurrentLine;
+
+			codepage = newcodepage;
+			writebom = (codepage == ScriptEncodings.UTF8 && ScriptEncodings.HasUtf8Bom(data));
+			bool readonlytext = scriptedit.ReadOnly; // Read-only resources can be re-read too
+			scriptedit.ReadOnly = false;
+			scriptedit.Text = ScriptEncodings.Decode(data, codepage);
+			scriptedit.ReadOnly = readonlytext;
+			scriptedit.EmptyUndoBuffer(); // Also sets the save point
+			if(modified) encodingchanged = true; // Still differs from the stored data
+			else storeddata = data;
+
+			// Keep the view where it was
+			caretline = General.Clamp(caretline, 0, scriptedit.Lines.Count - 1);
+			scriptedit.SetEmptySelection(scriptedit.Lines[caretline].Position);
+			scriptedit.FirstVisibleLine = firstline;
+		}
+
+		// Changes the encoding the document is saved in; the text itself is kept
+		public void ConvertTo(int newcodepage)
+		{
+			if(newcodepage == codepage && !writebom) return;
+			codepage = newcodepage;
+			writebom = false;
+			encodingchanged = true;
+		}
+
+		// Takes over the encoding of another document (when a document is replaced by a new tab)
+		public void CopyEncoding(ScriptEditorControl source)
+		{
+			codepage = source.codepage;
+			writebom = source.writebom;
 		}
 
 		//mxd

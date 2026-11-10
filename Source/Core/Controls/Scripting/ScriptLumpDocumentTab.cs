@@ -115,9 +115,10 @@ namespace CodeImp.DoomBuilder.Controls
             RemoveTrailingWhitespace();
 
 			// Store the lump data
-			MemoryStream stream = new MemoryStream(editor.GetText());
+			byte[] data = editor.GetText();
+			MemoryStream stream = new MemoryStream(data);
 			General.Map.SetLumpData(lumpname, stream);
-			editor.SetSavePoint(); //mxd
+			editor.SetSavePoint(data); //mxd
 			UpdateTitle(); //mxd
 			return true;
 		}

@@ -69,6 +69,7 @@ namespace CodeImp.DoomBuilder.Controls
 			// Set text and view settings
 			tabtype = ScriptDocumentTabType.FILE;
 			editor.Scintilla.Text = sourcetab.Editor.Scintilla.Text;
+			editor.CopyEncoding(sourcetab.Editor);
 			SetViewSettings(sourcetab.GetViewSettings());
 
 			// Set title
@@ -107,10 +108,11 @@ namespace CodeImp.DoomBuilder.Controls
             // [ZZ] remove trailing whitespace
             RemoveTrailingWhitespace();
 
+            byte[] data = editor.GetText();
             try
 			{
 				// Write the file
-				File.WriteAllBytes(filepathname, editor.GetText());
+				File.WriteAllBytes(filepathname, data);
 			}
 			catch(Exception e)
 			{
@@ -122,7 +124,7 @@ namespace CodeImp.DoomBuilder.Controls
 			}
 			
 			// Done
-			editor.SetSavePoint(); //mxd
+			editor.SetSavePoint(data); //mxd
 			UpdateTitle(); //mxd
 			return true;
 		}
@@ -150,8 +152,8 @@ namespace CodeImp.DoomBuilder.Controls
 		{
 			try
 			{
-				// Read the file
-				editor.Text = File.ReadAllText(filepathname); //mxd
+				// Read the file (encoding is detected the same way as for lumps, so saving writes it back unchanged)
+				editor.SetText(File.ReadAllBytes(filepathname));
 			}
 			catch(Exception e)
 			{

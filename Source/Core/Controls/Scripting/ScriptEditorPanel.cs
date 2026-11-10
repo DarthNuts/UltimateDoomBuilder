@@ -67,7 +67,13 @@ namespace CodeImp.DoomBuilder.Controls
 		private bool showwhitespace;
 		private bool wraplonglines;
 		private bool blockupdate;
-		
+
+		// Encoding menu and status bar indicator (created in code, see CreateEncodingControls)
+		private ToolStripMenuItem encodingmenuitem;
+		private ToolStripDropDownButton encodingstatus;
+		private readonly List<ToolStripMenuItem> interpretitems = new List<ToolStripMenuItem>();
+		private readonly List<ToolStripMenuItem> convertitems = new List<ToolStripMenuItem>();
+
 		#endregion
 		
 		#region ================== Properties
@@ -85,6 +91,7 @@ namespace CodeImp.DoomBuilder.Controls
 		public ScriptEditorPanel()
 		{
 			InitializeComponent();
+			CreateEncodingControls();
 			iconsmgr = new ScriptIconsManager(scripticons); //mxd
 			tabs.ImageList = scripticons; //mxd
 			PreviewKeyDown += new PreviewKeyDownEventHandler(ScriptEditorPanel_PreviewKeyDown);
@@ -930,6 +937,62 @@ namespace CodeImp.DoomBuilder.Controls
 
 			//mxd. Update script type description
 			scripttype.Text = ((t != null && t.Config != null) ? t.Config.Description : "Plain Text");
+
+			UpdateEncodingControls(t);
+		}
+
+		// Creates the Encoding menu and the encoding indicator in the status bar
+		private void CreateEncodingControls()
+		{
+			encodingmenuitem = new ToolStripMenuItem("Encoding");
+			encodingmenuitem.DropDownOpening += delegate { UpdateEncodingControls(ActiveTab); };
+			AddEncodingItems(encodingmenuitem.DropDownItems);
+			menustrip.Items.Insert(menustrip.Items.IndexOf(viewmenuitem) + 1, encodingmenuitem);
+
+			encodingstatus = new ToolStripDropDownButton("UTF-8");
+			encodingstatus.ToolTipText = "Script encoding";
+			encodingstatus.DropDownOpening += delegate { UpdateEncodingControls(ActiveTab); };
+			AddEncodingItems(encodingstatus.DropDownItems);
+			statusbar.Items.Insert(statusbar.Items.IndexOf(scripttype), encodingstatus);
+		}
+
+		private void AddEncodingItems(ToolStripItemCollection items)
+		{
+			foreach(int codepage in ScriptEncodings.CodePages)
+			{
+				ToolStripMenuItem item = new ToolStripMenuItem("Interpret as " + ScriptEncodings.GetDisplayName(codepage));
+				item.Tag = codepage;
+				item.ToolTipText = "Re-read the script data in this encoding (use it when the text was opened in the wrong one)";
+				item.Click += OnInterpretEncodingClick;
+				items.Add(item);
+				interpretitems.Add(item);
+			}
+
+			items.Add(new ToolStripSeparator());
+
+			foreach(int codepage in ScriptEncodings.CodePages)
+			{
+				ToolStripMenuItem item = new ToolStripMenuItem("Convert to " + ScriptEncodings.GetDisplayName(codepage));
+				item.Tag = codepage;
+				item.ToolTipText = "Keep the text and save the script in this encoding";
+				item.Click += OnConvertEncodingClick;
+				items.Add(item);
+				convertitems.Add(item);
+			}
+		}
+
+		// Shows the encoding of the current script: status bar text, checked "Interpret as" item, available conversions
+		private void UpdateEncodingControls(ScriptDocumentTab t)
+		{
+			encodingmenuitem.Enabled = (t != null);
+			encodingstatus.Visible = (t != null);
+			if(t == null) return;
+
+			int codepage = t.Editor.CodePage;
+			bool editable = (!t.IsReadOnly && !t.Editor.Scintilla.ReadOnly);
+			encodingstatus.Text = ScriptEncodings.GetShortName(codepage, t.Editor.WriteBom);
+			foreach(ToolStripMenuItem item in interpretitems) item.Checked = ((int)item.Tag == codepage);
+			foreach(ToolStripMenuItem item in convertitems) item.Enabled = (editable && ((int)item.Tag != codepage || t.Editor.WriteBom));
 		}
 
 		//mxd
@@ -1359,6 +1422,36 @@ namespace CodeImp.DoomBuilder.Controls
 		private void menuduplicateline_Click(object sender, EventArgs e)
 		{
 			if(ActiveTab != null) ActiveTab.Editor.DuplicateLine();
+		}
+
+		// Encoding -> Interpret as...
+		private void OnInterpretEncodingClick(object sender, EventArgs e)
+		{
+			ScriptDocumentTab t = ActiveTab;
+			if(t == null) return;
+			int codepage = (int)((ToolStripItem)sender).Tag;
+			if(codepage == t.Editor.CodePage) return;
+
+			if(t.IsChanged && General.ShowWarningMessage("The script has unsaved changes. Re-reading it in " + ScriptEncodings.GetDisplayName(codepage)
+				+ " uses its current text and clears the undo history." + Environment.NewLine + "Continue?", MessageBoxButtons.YesNo) == DialogResult.No) return;
+
+			t.InterpretAs(codepage);
+			UpdateInterface(true);
+		}
+
+		// Encoding -> Convert to...
+		private void OnConvertEncodingClick(object sender, EventArgs e)
+		{
+			ScriptDocumentTab t = ActiveTab;
+			if(t == null) return;
+			int codepage = (int)((ToolStripItem)sender).Tag;
+
+			int lost = ScriptEncodings.CountUnencodable(t.Editor.Text, codepage);
+			if(lost > 0 && General.ShowWarningMessage(lost + " character(s) can't be represented in " + ScriptEncodings.GetDisplayName(codepage)
+				+ " and will be replaced when saving." + Environment.NewLine + "Convert anyway?", MessageBoxButtons.YesNo) == DialogResult.No) return;
+
+			t.ConvertTo(codepage);
+			UpdateInterface(true);
 		}
 
 		//mxd
