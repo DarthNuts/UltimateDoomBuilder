@@ -37,3 +37,5 @@ using System.Runtime.InteropServices;
 [assembly: NeutralResourcesLanguageAttribute("en")]
 
 [assembly: InternalsVisibleTo("Builder.Tests")]
+// ZT: плагин режима проекта открывает и сохраняет карты через внутренние методы General (ZT/workbench-plan.md, этап 2)
+[assembly: InternalsVisibleTo("ZTProject")]

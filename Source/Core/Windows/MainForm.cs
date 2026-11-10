@@ -1989,6 +1989,18 @@ namespace CodeImp.DoomBuilder.Windows
 			modecontrolsloolbar.ResumeLayout(true);
 		}
 
+		// ZT: элементы строки состояния от плагинов (ветка git в режиме проекта) — сразу после названия игровой
+		// конфигурации. Каждый следующий элемент встаёт перед предыдущим.
+		internal void AddStatusItem(ToolStripItem item)
+		{
+			statusbar.Items.Insert(statusbar.Items.IndexOf(configlabel) + 1, item);
+		}
+
+		internal void RemoveStatusItem(ToolStripItem item)
+		{
+			statusbar.Items.Remove(item);
+		}
+
 		// This adds a button to the toolbar
 		public void AddButton(ToolStripItem button) { AddButton(button, ToolbarSection.Custom, General.Plugins.FindPluginByAssembly(Assembly.GetCallingAssembly())); }
 		public void AddButton(ToolStripItem button, ToolbarSection section) { AddButton(button, section, General.Plugins.FindPluginByAssembly(Assembly.GetCallingAssembly())); }

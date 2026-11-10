@@ -69,7 +69,7 @@ $plugins = 'AutomapMode\AutomapMode', 'BlockmapExplorer\BlockmapExplorer', 'Buil
 	'BuilderModes\BuilderModes', 'ColorPicker\ColorPicker', 'CommentsPanel\CommentsPanel', 'NodesViewer\NodesViewer',
 	'RejectExplorer\RejectExplorer', 'SoundPropagationMode\SoundPropagation', 'StairSectorBuilder\StairSectorBuilder',
 	'TagExplorer\TagExplorer', 'TagRange\TagRange', '3DFloorMode\ThreeDFloorMode', 'UDBScript\UDBScript',
-	'VisplaneExplorer\VisplaneExplorer'
+	'VisplaneExplorer\VisplaneExplorer', 'ZTProject\ZTProject'
 foreach ($p in $plugins) { Invoke-Build "Source\Plugins\$p.csproj" @('-p:BuildProjectReferences=false') }
 
 # Native library from an installed UDB
