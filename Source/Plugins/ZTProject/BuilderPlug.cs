@@ -350,7 +350,11 @@ namespace CodeImp.DoomBuilder.ZTProject
 				if(!Pull(dir, false)) return;
 				r = Git.Run(dir, "push", "origin", "HEAD:" + branch);
 			}
-			if(r.Ok) General.Interface.DisplayStatus(StatusType.Info, "ZT: отправлено в " + branch + ".");
+			if(r.Ok)
+			{
+				General.Interface.DisplayStatus(StatusType.Info, "ZT: отправлено в " + branch + ".");
+				StartCi(dir, branch);     // сборка и проверки на машине, итог — в чат
+			}
 			else Dialogs.ShowText(General.Interface, "ZT: отправка не удалась", r.Output);
 		}
 
@@ -380,10 +384,29 @@ namespace CodeImp.DoomBuilder.ZTProject
 					return false;
 				}
 
-				// Конфликтуют только карты — их решают в окне конфликтов, слияние не отменяется
+				// Конфликты решаются окнами, слияние не отменяется: сначала обычные файлы («у нас» / «с сервера» / ИИ),
+				// потом карты (по полям)
 				string why = null;
 				bool cancelled = false;
-				if(!conflicts.All(MapConflicts.IsMapTextmap) || !ResolveMapConflicts(dir, conflicts, out why, out cancelled))
+				List<string> maps = conflicts.Where(MapConflicts.IsMapTextmap).ToList();
+				List<FileConflict> files = FileConflicts.Load(dir);
+				string filesummary = null;
+				if(files.Count > 0)
+				{
+					Cursor.Current = Cursors.Default;
+					FileConflictAction act = FileConflicts.Ask(General.Interface, dir, files, maps.Count, CanAskAiMerge(dir));
+					Cursor.Current = Cursors.WaitCursor;
+					if(act == FileConflictAction.AskAi) { AskAiMerge(dir, branch, conflicts); return false; }
+					if(act == FileConflictAction.Cancel) cancelled = true;
+					else
+					{
+						why = FileConflicts.Apply(dir, files);
+						filesummary = FileConflicts.Summary(files);
+					}
+				}
+				bool ok = !cancelled && why == null &&
+				          (maps.Count > 0 ? ResolveMapConflicts(dir, maps, filesummary, out why, out cancelled) : CommitMerge(dir, filesummary, out why));
+				if(!ok)
 				{
 					Git.Run(dir, "merge", "--abort");
 					if(cancelled)
@@ -393,12 +416,11 @@ namespace CodeImp.DoomBuilder.ZTProject
 					}
 					Dialogs.ShowText(General.Interface, "ZT: получить не удалось — конфликт",
 						"Слияние отменено, ваши правки на месте (локальный коммит).\r\nКонфликт в файлах:\r\n  " +
-						string.Join("\r\n  ", conflicts) + (why != null ? "\r\n\r\n" + why : "") +
-						"\r\n\r\nКарты git сливает семантически (ZTMapMerge), конфликты карт решаются в окне конфликтов; конфликт в " +
-						"других файлах (скрипты, src/) пока решается вручную или в чате с ИИ. Вывод git — ниже.\r\n\r\n" + pull.Output);
+						string.Join("\r\n  ", conflicts) + (why != null ? "\r\n\r\n" + why : "") + "\r\n\r\nВывод git — ниже.\r\n\r\n" + pull.Output);
 					return false;
 				}
-				resolved = "Конфликты карт решены в окне конфликтов, слияние закоммичено.";
+				resolved = (files.Count > 0 ? "Конфликты в файлах решены" : "") + (files.Count > 0 && maps.Count > 0 ? ", " : "") +
+				           (maps.Count > 0 ? (files.Count > 0 ? "к" : "К") + "онфликты карт решены в окне конфликтов" : "") + ", слияние закоммичено.";
 			}
 
 			string after = Git.Run(dir, "rev-parse", "HEAD").StdOut.Trim();
@@ -412,6 +434,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 			List<string> commits = Git.Lines(Git.Run(dir, "log", "--no-merges", "--format=%h %s", before + ".." + after));
 			string reload = null;
 			if(current != null && current.IsTouchedBy(changed)) reload = ReloadCurrentMap("ZT: получены свежие правки", false);
+			if(report) StartCi(dir, branch);     // пришли правки (например, от Claude) — собрать и проверить ветку сервера
 			SrcChangedBy(changed);
 
 			string text = "Получено коммитов: " + commits.Count + "." + (resolved != null ? " " + resolved : "") + (reload != null ? " " + reload : "");
@@ -424,7 +447,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 		// Конфликты карт при слиянии: окно выбора, запись выбора в TEXTMAP, коммит слияния. false — слияние надо отменить
 		// (cancelled — пользователь сам отменил, иначе причина — в why).
-		private bool ResolveMapConflicts(string dir, List<string> conflicts, out string why, out bool cancelled)
+		private bool ResolveMapConflicts(string dir, List<string> conflicts, string extrasummary, out string why, out bool cancelled)
 		{
 			cancelled = false;
 			List<MapConflictFile> files = MapConflicts.Load(dir, conflicts, out why);
@@ -438,10 +461,15 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 			why = MapConflicts.Apply(dir, files);
 			if(why != null) return false;
+			return CommitMerge(dir, (extrasummary != null ? extrasummary + "\n\n" : "") + MapConflicts.Summary(files), out why);
+		}
+
+		// Коммит слияния: сообщение git (без строк-комментариев) и итог выбора. false — остались неслитые файлы или коммит не удался
+		private static bool CommitMerge(string dir, string summary, out string why)
+		{
+			why = null;
 			List<string> left = Git.Lines(Git.Run(dir, "diff", "--name-only", "--diff-filter=U"));
 			if(left.Count > 0) { why = "Остались неслитые файлы: " + string.Join(", ", left); return false; }
-
-			// Сообщение слияния git (без строк-комментариев) и итог выбора
 			string msg = "Merge";
 			string msgpath = Git.Run(dir, "rev-parse", "--git-path", "MERGE_MSG").StdOut.Trim();
 			if(msgpath.Length > 0)
@@ -450,7 +478,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 				if(File.Exists(full))
 					msg = string.Join("\n", File.ReadAllLines(full, Encoding.UTF8).Where(l => !l.StartsWith("#"))).Trim();
 			}
-			GitResult commit = Git.CommitWithMessage(dir, msg + "\n\n" + MapConflicts.Summary(files) + "\n");
+			GitResult commit = Git.CommitWithMessage(dir, msg + (string.IsNullOrEmpty(summary) ? "" : "\n\n" + summary) + "\n");
 			if(!commit.Ok) { why = "Коммит слияния не удался:\n" + commit.Output; return false; }
 			return true;
 		}

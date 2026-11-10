@@ -189,6 +189,9 @@ namespace CodeImp.DoomBuilder.ZTProject
 			};
 		}
 
+		internal string ProjectDirForMcp { get { return ProjectDir; } }
+		internal string CurrentBranchForMcp(string dir) { return CurrentBranch(dir); }
+
 		internal string McpSetProject(string dir)
 		{
 			if(!ProjectMap.IsProjectDir(dir)) throw new ArgumentException("в папке нет " + ProjectMap.MANIFEST);

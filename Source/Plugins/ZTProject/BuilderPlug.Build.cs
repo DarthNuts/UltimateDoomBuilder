@@ -26,35 +26,8 @@ namespace CodeImp.DoomBuilder.ZTProject
 	{
 		#region ================== Variables
 
-		// Сборка на машине (bash, получает ветку и путь голого репозитория). Тот же коммит повторно не собирается.
-		// Вывод для плагина: «ZTBUILD <sha256> <размер> <путь>» по файлу и «ZTCOMMIT <коммит> <тема>».
-		private const string CI_SCRIPT = @"set -euo pipefail
-B=""$1""; BARE=""$2""; C=""$HOME/ci/ZeroTolerance""; OUT=""$HOME/ci/out/$B""
-mkdir -p ""$HOME/ci"" ""$OUT""
-exec 9>""$HOME/ci/.lock""; flock 9
-[ -d ""$C/.git"" ] || git clone -q ""$BARE"" ""$C""
-cd ""$C""
-git fetch -q origin
-git checkout -q -f --detach ""origin/$B""
-git clean -q -fdx -e zt_paths.local.json
-COMMIT=""$(git rev-parse HEAD)""
-if [ ""$(head -1 ""$OUT/build.txt"" 2>/dev/null)"" != ""$COMMIT"" ] || [ ! -f ""$OUT/ZeroTolerance.wad"" ] || [ ! -f ""$OUT/ZeroTolerance.pk3"" ]; then
-  python3 - ""$OUT"" <<'PY'
-import json, os, sys
-src = os.path.expanduser('~/projects/ZeroTolerance/zt_paths.local.json')
-d = json.load(open(src, encoding='utf-8')) if os.path.exists(src) else {'acc_dir': '/opt/zt/acc'}
-d['gzdoom_dir'] = sys.argv[1]
-json.dump(d, open('zt_paths.local.json', 'w', encoding='utf-8'), indent=2)
-PY
-  python3 build-wad.py >&2
-  python3 build.py >&2
-  echo ""$COMMIT"" > ""$OUT/build.txt""
-fi
-for f in ZeroTolerance.wad ZeroTolerance.pk3; do
-  echo ""ZTBUILD $(sha256sum ""$OUT/$f"" | cut -d' ' -f1) $(stat -c %s ""$OUT/$f"") $OUT/$f""
-done
-echo ""ZTCOMMIT $(git log -1 --format='%h %s')""
-";
+		// Рецепт сборки и проверок — Resources/ci.sh (ставится на машину в ~/.zt/ci.sh: его зовут «Получить сборку» и сборка
+		// после «Отправить»). Вывод для плагина: «ZTBUILD <sha256> <размер> <путь>» по файлу, «ZTCOMMIT <коммит> <тема>».
 
 		private ToolStripMenuItem buildmenu;
 		private volatile bool building;
@@ -137,7 +110,8 @@ echo ""ZTCOMMIT $(git log -1 --format='%h %s')""
 		{
 			DateTime start = DateTime.Now;
 			BuildResult r = new BuildResult();
-			string output = Exec(ssh[0], ssh.Skip(1).Concat(new[] { host, "bash -s -- " + branch + " " + bare }), CI_SCRIPT, 1200000);
+			string output = Exec(ssh[0], ssh.Skip(1).Concat(new[] { host, "bash -s -- " + branch + " " + bare }),
+				CiInstall + "exec bash ~/.zt/ci.sh \"$1\" \"$2\"\n", 1200000);
 			List<string[]> files = new List<string[]>();
 			foreach(string line in output.Split('\n').Select(l => l.Trim()))
 			{

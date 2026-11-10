@@ -138,17 +138,64 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				return r == null ? ToolResult.Text("сеанс запускается") : ToolResult.Error(r);
 			});
 
-			Add("chat_send", "Чат Claude в UDB: отправить сообщение, как с клавиатуры панели.", Schema("text!", "string", "текст"), true, a =>
+			Add("chat_send", "Чат Claude в UDB: отправить сообщение, как с клавиатуры панели; без text — содержимое поля запроса (кнопка «Отправить»).", Schema("text", "string", "текст"), true, a =>
 				plug.ChatPanelForMcp.SendText(Str(a, "text")) ? ToolResult.Text("отправлено") : ToolResult.Error("сеанс не готов (не подключён или Claude думает)"));
 
-			Add("chat_attach", "Чат Claude в UDB: кнопка «Выделенное» — вставить в поле запроса номера выделенных элементов; ответ — текст поля.",
-			    Schema(), true, a => ToolResult.Text(plug.AttachSelectionForMcp()));
-
-			Add("chat_answer", "Чат Claude в UDB: ответить на запрос разрешения («Разрешить» / «Отклонить»).",
-			    Schema("allow!", "boolean", "разрешить"), true, a =>
+			Add("chat_attach", "Чат Claude в UDB: кнопки вложений. kind: selection — «Выделенное» (номера в поле запроса), map_image — " +
+			    "«Картинка карты» (схема видимой области, картинкой в следующем сообщении), screenshot — «Скриншот» окна UDB, file — " +
+			    "«Файл…» без окна (path: файл проекта — путь в поле запроса, картинка вне проекта — вложением). Ответ — что сделано, " +
+			    "текст поля и ожидающие картинки.",
+			    Schema("kind", "string", "selection (по умолчанию) | map_image | screenshot | file",
+			           "path", "string", "для file: путь файла на ПК"), true, a =>
 			{
-				if(!plug.ChatPanelForMcp.PermissionPending) return ToolResult.Error("запроса разрешения нет");
-				plug.ChatPanelForMcp.AnswerPermission(Bool(a, "allow", false));
+				string kind = Str(a, "kind") ?? "selection", done;
+				switch(kind)
+				{
+					case "selection": plug.AttachSelectionForMcp(); done = "выделенное"; break;
+					case "map_image": done = plug.AttachMapImage() ?? "карта не открыта"; break;
+					case "screenshot": done = plug.AttachScreenshot(); break;
+					case "file":
+						if(string.IsNullOrEmpty(Str(a, "path"))) return ToolResult.Error("нужен path");
+						done = plug.AttachFile(Str(a, "path"));
+						break;
+					default: return ToolResult.Error("неизвестный kind: " + kind);
+				}
+				return ToolResult.Json(new Dictionary<string, object>
+				{
+					{ "done", done }, { "input", plug.ChatPanelForMcp.InputText }, { "images", plug.ChatPanelForMcp.ImageLabels.ToList() }
+				});
+			});
+
+			Add("chat_out", "Чат Claude в UDB: карточки файлов из ~/out машины; download — скачать файл в %LOCALAPPDATA%\\ZTWorkbench\\out " +
+			    "(как клик по карточке, но без открытия), rescan — сверить ~/out сейчас.",
+			    Schema("download", "string", "имя файла в ~/out", "rescan", "boolean", "сверить ~/out"), true, a =>
+			{
+				if(Bool(a, "rescan", false)) plug.ScanOutForMcp();
+				string name = Str(a, "download");
+				if(!string.IsNullOrEmpty(name)) plug.DownloadOutFile(name, false);
+				return ToolResult.Json(new Dictionary<string, object>
+				{
+					{ "cards", plug.ChatPanelForMcp.OutFiles.ToList() }, { "local_dir", BuilderPlug.OutDir },
+					{ "note", string.IsNullOrEmpty(name) ? "" : "скачивание идёт в фоне — итог в chat_log" }
+				});
+			});
+
+			Add("chat_answer", "Чат Claude в UDB: ответить на запрос разрешения («Разрешить» / «Отклонить») или на вопрос Claude " +
+			    "(AskUserQuestion — вопросы в chat_log.question): answers — {текст вопроса: вариант или свой текст}; allow=false — «Не отвечать».",
+			    Schema("allow", "boolean", "разрешить (для вопроса: false — не отвечать)",
+			           "answers", "object", "ответы на вопрос Claude: {\"текст вопроса\": \"вариант\"}"), true, a =>
+			{
+				Chat.ChatPanel p = plug.ChatPanelForMcp;
+				if(p.QuestionPending)
+				{
+					Dictionary<string, object> answers = Arg(a, "answers") as Dictionary<string, object>;
+					if(answers == null && !Bool(a, "allow", true)) { p.SkipQuestions(); return ToolResult.Text("без ответа"); }
+					if(answers == null) return ToolResult.Error("ждёт ответа на вопрос: answers {вопрос: вариант}");
+					string err = p.AnswerQuestions(answers);
+					return err == null ? ToolResult.Text("ответ отправлен") : ToolResult.Error(err);
+				}
+				if(!p.PermissionPending) return ToolResult.Error("запроса разрешения нет");
+				p.AnswerPermission(Bool(a, "allow", false));
 				return ToolResult.Text("ответ отправлен");
 			});
 
@@ -161,7 +208,9 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 				return ToolResult.Json(new Dictionary<string, object>
 				{
 					{ "running", s != null && s.Running }, { "busy", s != null && s.Busy }, { "session", s != null ? s.SessionId : null },
-					{ "permission_pending", plug.ChatPanelForMcp.PermissionPending }, { "text", t.Length > n ? t.Substring(t.Length - n) : t }
+					{ "permission_pending", plug.ChatPanelForMcp.PermissionPending },
+					{ "question", plug.ChatPanelForMcp.QuestionPending ? plug.ChatPanelForMcp.PendingQuestions : null },
+					{ "text", t.Length > n ? t.Substring(t.Length - n) : t }
 				});
 			});
 

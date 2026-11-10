@@ -214,12 +214,21 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 			}
 			Form f = FindForm(window);
 			if(f == null) throw new InvalidOperationException("окно «" + window + "» не найдено");
+			// Кнопки, затем радиокнопки и галочки (варианты ответа в чате и т. п.)
 			foreach(bool exact in new[] { true, false })
-				foreach(Button b in All<Button>(f))
+				foreach(ButtonBase b in All<Button>(f).Cast<ButtonBase>().Concat(All<RadioButton>(f)).Concat(All<CheckBox>(f)))
 					if(b.Visible && TextMatches(b.Text, button, exact))
 					{
 						if(!b.Enabled) throw new InvalidOperationException("кнопка «" + Clean(b.Text) + "» недоступна");
-						b.PerformClick();
+						// Отложенно: кнопка может открыть модальное окно, и прямой вызов не вернулся бы, пока его не закроют
+						ButtonBase target = b;
+						f.BeginInvoke((MethodInvoker)(() =>
+						{
+							if(target.IsDisposed) return;
+							if(target is Button) ((Button)target).PerformClick();
+							else if(target is RadioButton) ((RadioButton)target).Checked = true;
+							else ((CheckBox)target).Checked = !((CheckBox)target).Checked;
+						}));
 						return "нажата «" + Clean(b.Text) + "» в окне «" + f.Text + "»";
 					}
 			throw new InvalidOperationException("в окне «" + f.Text + "» нет кнопки «" + button + "»");

@@ -477,6 +477,19 @@ namespace CodeImp.DoomBuilder.ZTProject.Mcp
 			    "map_info → zt.build.", Schema("dest", "string", "папка для файлов (по умолчанию — папка GZDoom из настроек)"), true,
 			    a => ToolResult.Text(plug.GetBuild(Str(a, "dest"))));
 
+			Add("zt_ci_status", "Плагин ZT: итог сборки и проверок на машине после «Отправить» / «Получить» (WAD, pk3, ZScript полным " +
+			    "набором модов): «идёт: …», «ok <ветка> <коммит>», «fail …» с ошибками. start — запустить сейчас для текущей ветки.",
+			    Schema("start", "boolean", "запустить сборку и проверки сейчас"), false, a =>
+			{
+				if(Bool(a, "start", false))
+				{
+					string dir = plug.ProjectDirForMcp;
+					if(!ProjectMap.IsProjectDir(dir)) return ToolResult.Error("папка проекта не выбрана");
+					plug.StartCi(dir, plug.CurrentBranchForMcp(dir));
+				}
+				return ToolResult.Text(plug.CiStateForMcp.Length > 0 ? plug.CiStateForMcp : "сборок после push в этом сеансе UDB не было");
+			});
+
 			tools.Add(new Tool
 			{
 				Name = "zt_reload_map", Writes = true, Timeout = 120000,

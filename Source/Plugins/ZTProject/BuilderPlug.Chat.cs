@@ -3,11 +3,15 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using CodeImp.DoomBuilder.Actions;
 using CodeImp.DoomBuilder.Controls;
+using CodeImp.DoomBuilder.Editing;
+using CodeImp.DoomBuilder.Geometry;
 using CodeImp.DoomBuilder.Windows;
 using CodeImp.DoomBuilder.ZTProject.Chat;
 using CodeImp.DoomBuilder.ZTProject.Mcp;
@@ -26,6 +30,9 @@ namespace CodeImp.DoomBuilder.ZTProject
 		private ChatPanel chatpanel;
 		private Docker chatdocker;
 		private ChatSession chat;
+		private List<string> chatssh;          // ssh рабочей копии и адрес машины — для ~/out
+		private string chathost;
+		private readonly Dictionary<string, string> outseen = new Dictionary<string, string>();   // ~/out: имя -> «время размер»
 
 		private string ChatLastSession
 		{
@@ -54,6 +61,10 @@ namespace CodeImp.DoomBuilder.ZTProject
 			chatpanel.NewChatRequested += () => StartChat(null);
 			chatpanel.ResumeRequested += () => StartChat(ChatLastSession.Length > 0 ? ChatLastSession : null);
 			chatpanel.AttachRequested += AttachSelection;
+			chatpanel.MapImageRequested += () => AttachMapImage();
+			chatpanel.ScreenshotRequested += () => AttachScreenshot();
+			chatpanel.FileRequested += AttachFileDialog;
+			chatpanel.OutFileClicked += name => DownloadOutFile(name, true);
 			chatpanel.GetRequested += () => Get();
 			chatpanel.PermissionAnswered += (id, allow, input) => { if(chat != null && chat.Running) chat.Answer(id, allow, input, null); };
 			menu.DropDownItems.Insert(0, new ToolStripMenuItem("Чат с Claude", null, (s, e) => ShowChat()));
@@ -114,14 +125,26 @@ namespace CodeImp.DoomBuilder.ZTProject
 			chat.SessionStarted += id => Ui(() => { if(me != chat) return; ChatLastSession = id; chatpanel.SetStatus("сессия " + id, true, chat.Busy); });
 			chat.TextDelta += t => Ui(() => { if(me == chat) chatpanel.Text(t); });
 			chat.ToolUse += (n, w) => Ui(() => { if(me == chat) chatpanel.Tool(n, w); });
-			chat.PermissionRequest += (id, tool, input) => Ui(() => { if(me == chat) chatpanel.AskPermission(id, tool, ChatSession.Summary(tool, input), input); });
-			chat.Ready += x => Ui(() => { if(me == chat && chat.SessionId == null) chatpanel.SetStatus("готово — пишите запрос", true, false); });
+			chat.PermissionRequest += (id, tool, input) => Ui(() =>
+			{
+				if(me != chat) return;
+				General.Interface.SelectDocker(chatdocker);     // ждёт человека — панель выдвинуть
+				// вопрос Claude — варианты ответа, а не «Разрешить / Отклонить»
+				if(tool == "AskUserQuestion") chatpanel.AskQuestions(id, input);
+				else chatpanel.AskPermission(id, tool, ChatSession.Summary(tool, input), input);
+			});
+			chat.Ready += x => Ui(() =>
+			{
+				// запрос мог уйти сразу после запуска («Попросить ИИ свести») — тогда Claude уже думает
+				if(me == chat && chat.SessionId == null) chatpanel.SetStatus(chat.Busy ? "Claude думает…" : "готово — пишите запрос", true, chat.Busy);
+			});
 			chat.TurnFinished += (text, error, seconds) => Ui(() =>
 			{
 				if(me != chat) return;
 				if(error) chatpanel.Error(text.Length > 0 ? text : "ход прерван");     // «Стоп»: error_during_execution без текста
 				chatpanel.TurnEnd(seconds > 0 ? string.Format(CultureInfo.InvariantCulture, "— ход завершён за {0:0} с", seconds) : "— ход завершён");
 				chatpanel.SetStatus("сессия " + chat.SessionId, true, false);
+				ScanOut(true);
 			});
 			chat.Info += t => Ui(() => { if(me == chat) chatpanel.Note(t); });
 			chat.Exited += code => Ui(() =>
@@ -132,6 +155,10 @@ namespace CodeImp.DoomBuilder.ZTProject
 				chatpanel.SetStatus("не подключено — «Новый чат» или «Продолжить»", false, false);
 			});
 			chatpanel.Clear();
+			chatpanel.ClearOutFiles();
+			chatssh = ssh;
+			chathost = host;
+			ScanOut(false);     // что уже лежит в ~/out — не новое
 			chatpanel.Note((resume != null ? "продолжение сессии " + resume : "новый чат") + " — " + host + ", MCP UDB через порт " + ChatRemotePort);
 			try { chat.Start(ssh, host, ChatRemotePort, mcp.Port, cmd); }
 			catch(Exception ex) { chat = null; return Fail("ssh не запустился: " + ex.Message); }
@@ -150,13 +177,16 @@ namespace CodeImp.DoomBuilder.ZTProject
 		private void ChatSend(string text)
 		{
 			if(chat == null || !chat.Running) { chatpanel.Error("сеанс не запущен"); return; }
-			chatpanel.User(text);
+			int n = chatpanel.ImageCount;
+			string labels = string.Join(", ", chatpanel.ImageLabels);
+			List<byte[]> images = chatpanel.TakeImages();
+			chatpanel.User(text + (n > 0 ? "\n🖼 " + labels : ""));
 			if(chatpanel.SendFirst)
 			{
 				string sent = QuietSend();
 				if(sent != null) chatpanel.Note(sent);
 			}
-			try { chat.Send(text); chatpanel.SetStatus("Claude думает…", true, true); }
+			try { chat.Send(text, images); chatpanel.SetStatus("Claude думает…", true, true); }
 			catch(Exception ex) { chatpanel.Error(ex.Message); }
 		}
 
@@ -179,8 +209,10 @@ namespace CodeImp.DoomBuilder.ZTProject
 			});
 			const string prompt = "Ты в чате панели Ultimate Doom Builder владельца проекта (плагин ZT). MCP-сервер udb — его UDB на ПК: " +
 			                      "открытая карта (map_info, get_elements, set_fields, render_2d…) и окна UDB. Правки файлов проекта коммить и " +
-			                      "отправляй по правилам проекта — владелец заберёт их кнопкой «Получить». Отвечай по-русски.";
-			return "set -e\numask 077\nmkdir -p ~/.zt\n" +
+			                      "отправляй по правилам проекта — владелец заберёт их кнопкой «Получить». Отдельные файлы для владельца " +
+			                      "(картинки, отчёты, логи — не файлы проекта) клади в папку ~/out под простыми латинскими именами: в панели " +
+			                      "появится кнопка скачать и открыть. Отвечай по-русски.";
+			return "set -e\numask 077\nmkdir -p ~/.zt ~/out\n" +
 			       "cat > ~/.zt/udb-mcp.json <<'ZTEOF'\n" + mcpjson + "\nZTEOF\n" +
 			       "cat > ~/.zt/chat.sh <<'ZTEOF'\n" +
 			       "#!/usr/bin/env bash\n" +
@@ -232,6 +264,231 @@ namespace CodeImp.DoomBuilder.ZTProject
 			chatpanel.InsertText("[в UDB выделено на " + General.Map.Options.CurrentName + " (revision " + McpTools.Revision + "): " + string.Join("; ", parts) + "]");
 		}
 
+		// «Картинка карты»: схема видимой области 2D-вида (в 3D — вокруг выделенного или вся карта), выделенное подсвечено
+		// номерами; уходит картинкой в следующем сообщении, в поле запроса — подпись с координатами области
+		internal string AttachMapImage()
+		{
+			if(General.Map == null) { chatpanel.Note("карта не открыта"); return null; }
+			CodeImp.DoomBuilder.Map.MapSet m = General.Map.Map;
+			Dictionary<string, List<int>> hl = new Dictionary<string, List<int>>();
+			Action<string, IEnumerable<int>> add = (k, ids) => { List<int> l = ids.ToList(); if(l.Count > 0) hl[k] = l; };
+			add("sector", m.GetSelectedSectors(true).Select(x => x.Index));
+			add("linedef", m.GetSelectedLinedefs(true).Select(x => x.Index));
+			add("thing", m.GetSelectedThings(true).Select(x => x.Index));
+			add("vertex", m.GetSelectedVertices(true).Select(x => x.Index));
+			double[] rect = null;
+			if(General.Editing.Mode is ClassicMode && General.Interface.Display != null)
+			{
+				System.Drawing.Size s = General.Interface.Display.ClientSize;
+				Vector2D lt = General.Map.Renderer2D.DisplayToMap(new Vector2D(0, 0));
+				Vector2D rb = General.Map.Renderer2D.DisplayToMap(new Vector2D(s.Width, s.Height));
+				rect = new[] { lt.x, rb.y, rb.x, lt.y };
+			}
+			byte[] png = MapRender.Render(hl, rect, 512, 1400, true, true);
+			string name = General.Map.Options.CurrentName;
+			chatpanel.AddImage("схема " + name, png);
+			string caption = "[картинка: схема карты " + name + " из UDB" +
+				(rect != null ? string.Format(CultureInfo.InvariantCulture, ", область x {0:0}…{1:0}, y {2:0}…{3:0}", rect[0], rect[2], rect[1], rect[3]) : "") +
+				(hl.Count > 0 ? ", выделенное подсвечено номерами" : "") + "]";
+			chatpanel.InsertText(caption);
+			return caption;
+		}
+
+		// «Скриншот»: главное окно UDB как есть
+		internal string AttachScreenshot()
+		{
+			byte[] png = UiAutomation.Capture("");
+			chatpanel.AddImage("скриншот UDB", png);
+			return "скриншот " + png.Length / 1024 + " КБ";
+		}
+
+		private void AttachFileDialog()
+		{
+			using(OpenFileDialog d = new OpenFileDialog { Title = "Файл для Claude", Filter = "Все файлы|*.*" })
+			{
+				if(ProjectMap.IsProjectDir(ProjectDir)) d.InitialDirectory = ProjectDir;
+				if(d.ShowDialog(General.MainWindow) == DialogResult.OK) chatpanel.Note(AttachFile(d.FileName));
+			}
+		}
+
+		// Файл проекта — путем в поле запроса (Claude читает его в своей рабочей копии); картинка вне проекта — вложением
+		internal string AttachFile(string path)
+		{
+			string full = Path.GetFullPath(path);
+			string dir = ProjectDir;
+			if(ProjectMap.IsProjectDir(dir))
+			{
+				string root = Path.GetFullPath(dir).TrimEnd('\\', '/') + "\\";
+				if(full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+				{
+					string rel = full.Substring(root.Length).Replace('\\', '/');
+					chatpanel.InsertText("[файл проекта: " + rel + "]");
+					return "в запрос добавлен путь " + rel + (chatpanel.SendFirst ? "" : " — без «Сначала отправить мои правки» Claude увидит версию с сервера");
+				}
+			}
+			string ext = Path.GetExtension(full).ToLowerInvariant();
+			if(ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif")
+			{
+				chatpanel.AddImage(Path.GetFileName(full), ImageAsPng(full));
+				return "картинка " + Path.GetFileName(full) + " добавлена к сообщению";
+			}
+			return "файл вне проекта — Claude на машине его не увидит; положите его в проект или пришлите картинкой";
+		}
+
+		// Картинка из файла — PNG не больше 1568 px по длинной стороне (больше API всё равно уменьшает)
+		private static byte[] ImageAsPng(string path)
+		{
+			using(System.Drawing.Image src = System.Drawing.Image.FromFile(path))
+			{
+				double k = Math.Min(1.0, 1568.0 / Math.Max(src.Width, src.Height));
+				int w = Math.Max(1, (int)(src.Width * k)), h = Math.Max(1, (int)(src.Height * k));
+				using(System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(w, h))
+				using(MemoryStream ms = new MemoryStream())
+				{
+					using(System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(bmp))
+					{
+						g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+						g.DrawImage(src, 0, 0, w, h);
+					}
+					bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+					return ms.ToArray();
+				}
+			}
+		}
+
+		#endregion
+
+		#region ================== AI merge
+
+		// «Попросить ИИ свести» доступно, если сервер рабочей копии — машина по SSH (там Claude пользователя)
+		private static bool CanAskAiMerge(string dir)
+		{
+			string url = Git.Run(dir, "config", "--get", "remote.origin.url").StdOut.Trim();
+			int colon = url.IndexOf(':');
+			return colon > 1 && !url.Contains("://");
+		}
+
+		// Конфликт при «Получить» → свести силами Claude (ZT/workbench-plan.md §2.3, п. 4): слияние отменяется, локальный коммит
+		// уходит на сервер во временную ветку <ветка>-merge-<время> (у дизайнера — design-merge-…, её пропускает хук прав),
+		// Claude сливает её в свою рабочую копию и отправляет ветку; человек потом жмёт «Получить» — это перемотка вперёд
+		private void AskAiMerge(string dir, string branch, List<string> conflicts)
+		{
+			string local = Git.Run(dir, "rev-parse", "--short", "HEAD").StdOut.Trim();
+			Git.Run(dir, "merge", "--abort");
+			string temp = branch + "-merge-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+			GitResult p = Git.Run(dir, "push", "origin", "HEAD:refs/heads/" + temp);
+			if(!p.Ok)
+			{
+				Dialogs.ShowText(General.Interface, "ZT: временная ветка не отправлена",
+					"Слияние отменено, ваши правки на месте (локальный коммит " + local + ").\r\n\r\n" + p.Output);
+				return;
+			}
+			string msg = "Сведи мои правки из UDB с сервером. Ветка " + temp + " — мои правки (локальный коммит " + local + "); при «Получить» " +
+			             "она конфликтует с " + branch + " с сервера в файлах:\n" + string.Join("\n", conflicts.Select(c => "  - " + c)) + "\n\n" +
+			             "Что сделать: в своей рабочей копии обнови " + branch + " с сервера (git fetch), слей в неё origin/" + temp + ", разреши " +
+			             "конфликты по смыслу, сохранив правки обеих сторон (TEXTMAP карт сливает драйвер merge=udmf); если правки " +
+			             "противоречат друг другу — спроси меня. Прогони проверки по правилам проекта. Закоммить слияние и отправь " + branch +
+			             " на сервер — на этот коммит и push я согласен. Потом удали временную ветку: git push origin --delete " + temp +
+			             ". Результат я заберу кнопкой «Получить».";
+			General.Interface.DisplayStatus(StatusType.Info, "ZT: правки во временной ветке " + temp + " — Claude сводит их в чате.");
+
+			if(chat == null || !chat.Running)
+			{
+				string why = StartChat(null);
+				if(why != null)
+				{
+					Dialogs.ShowText(General.Interface, "ZT: чат не запустился",
+						"Ваши правки отправлены во временную ветку " + temp + ", слияние отменено. Чат не запустился (" + why + ") — " +
+						"попросите Claude свести их сами, например так:\r\n\r\n" + msg);
+					return;
+				}
+			}
+			General.Interface.SelectDocker(chatdocker);
+			if(chat.Busy)
+			{
+				chatpanel.InsertText(msg);
+				chatpanel.Note("Claude сейчас занят — запрос на слияние в поле ввода, отправьте его, когда ход закончится");
+				return;
+			}
+			chatpanel.User(msg);
+			try { chat.Send(msg, null); chatpanel.SetStatus("Claude сводит правки…", true, true); }
+			catch(Exception ex) { chatpanel.Error(ex.Message); chatpanel.InsertText(msg); }
+		}
+
+		#endregion
+
+		#region ================== Files from Claude (~/out)
+
+		// Сверка ~/out на машине (в фоне): новые и изменившиеся файлы — карточки в панели. announce=false — только запомнить
+		private void ScanOut(bool announce)
+		{
+			List<string> ssh = chatssh;
+			string host = chathost;
+			if(ssh == null || host == null) return;
+			new Thread(() =>
+			{
+				string listing;
+				try { listing = Exec(ssh[0], ssh.Skip(1).Concat(new[] { "-n", host, "mkdir -p ~/out && cd ~/out && find . -type f ! -name '*.part' -printf '%T@ %s %P\\n'" }), null, 60000); }
+				catch(Exception ex) { if(announce) Ui(() => chatpanel.Note("~/out не прочитана: " + ex.Message.Split('\n')[0])); return; }
+				List<KeyValuePair<string, long>> fresh = new List<KeyValuePair<string, long>>();
+				lock(outseen)
+				{
+					if(!announce) outseen.Clear();
+					foreach(string line in listing.Split('\n'))
+					{
+						string[] f = line.Trim().Split(new[] { ' ' }, 3);
+						if(f.Length < 3 || f[2].Length == 0) continue;
+						string stamp = f[0] + " " + f[1], old;
+						if(outseen.TryGetValue(f[2], out old) && old == stamp) continue;
+						outseen[f[2]] = stamp;
+						long size;
+						if(announce && long.TryParse(f[1], out size)) fresh.Add(new KeyValuePair<string, long>(f[2], size));
+					}
+				}
+				if(fresh.Count > 0) Ui(() => { foreach(KeyValuePair<string, long> kv in fresh) chatpanel.AddOutFile(kv.Key, kv.Value); });
+			}) { IsBackground = true, Name = "ZT chat out scan" }.Start();
+		}
+
+		internal static string OutDir { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZTWorkbench", "out"); } }
+
+		// Скачать файл из ~/out в %LOCALAPPDATA%\ZTWorkbench\out и открыть программой по умолчанию (в фоне)
+		internal void DownloadOutFile(string name, bool open)
+		{
+			List<string> ssh = chatssh;
+			string host = chathost;
+			if(ssh == null || host == null) { chatpanel.Error("сеанс чата не запускался — машина неизвестна"); return; }
+			if(name.Split('/').Any(x => x == ".." || x.Length == 0)) { chatpanel.Error("странное имя файла: " + name); return; }
+			string local = Path.Combine(OutDir, name.Replace('/', '\\'));
+			chatpanel.Note("качаю " + name + "…");
+			new Thread(() =>
+			{
+				try
+				{
+					Directory.CreateDirectory(Path.GetDirectoryName(local));
+					string part = local + ".part";
+					if(File.Exists(part)) File.Delete(part);
+					string scp = ssh[0] == "ssh" ? "scp" : Path.Combine(Path.GetDirectoryName(ssh[0]) ?? "", "scp" + Path.GetExtension(ssh[0]));
+					Exec(scp, ssh.Skip(1).Concat(new[] { "-q", host + ":out/" + name, part }), null, 3600000);
+					if(File.Exists(local)) File.Delete(local);
+					File.Move(part, local);
+					Ui(() =>
+					{
+						chatpanel.Note("скачано: " + local);
+						if(open)
+						{
+							try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(local) { UseShellExecute = true }); }
+							catch(Exception ex) { chatpanel.Error("не открылся: " + ex.Message); }
+						}
+					});
+				}
+				catch(Exception ex) { Ui(() => chatpanel.Error("не скачан " + name + ": " + ex.Message.Split('\n')[0])); }
+			}) { IsBackground = true, Name = "ZT chat out download" }.Start();
+		}
+
+		#endregion
+
+		#region ================== Sending
+
 		// Перед запросом: сохранить карту, закоммитить и отправить неотправленное (без окна комментария). null — нечего
 		private string QuietSend()
 		{
@@ -266,6 +523,7 @@ namespace CodeImp.DoomBuilder.ZTProject
 
 		internal ChatPanel ChatPanelForMcp { get { return chatpanel; } }
 		internal string AttachSelectionForMcp() { AttachSelection(); return chatpanel.InputText; }
+		internal void ScanOutForMcp() { ScanOut(true); }
 		internal ChatSession ChatForMcp { get { return chat; } }
 
 		#endregion

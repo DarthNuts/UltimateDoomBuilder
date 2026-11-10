@@ -39,6 +39,7 @@
     <Compile Include="BuilderPlug.cs" />
     <Compile Include="BuilderPlug.Build.cs" />
     <Compile Include="BuilderPlug.Chat.cs" />
+    <Compile Include="BuilderPlug.Ci.cs" />
     <Compile Include="Chat\ChatPanel.cs" />
     <Compile Include="Chat\ChatSession.cs" />
     <Compile Include="BuilderPlug.Check.cs" />
@@ -47,6 +48,7 @@
     <Compile Include="BuilderPlug.Test.cs" />
     <Compile Include="BuilderPlug.Watch.cs" />
     <Compile Include="Dialogs.cs" />
+    <Compile Include="FileConflicts.cs" />
     <Compile Include="Git.cs" />
     <Compile Include="MapConflicts.cs" />
     <Compile Include="MapNav.cs" />
@@ -69,6 +71,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\Actions.cfg" />
+    <EmbeddedResource Include="Resources\ci.sh" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Core\Builder.csproj">

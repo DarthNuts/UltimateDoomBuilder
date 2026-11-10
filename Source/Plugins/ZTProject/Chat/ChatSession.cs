@@ -102,14 +102,28 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 			}
 		}
 
-		public void Send(string text)
+		// images — PNG-вложения (картинка области карты, скриншот): уходят в том же сообщении блоками image, как в API
+		public void Send(string text, IList<byte[]> images)
 		{
+			object content = text;
+			if(images != null && images.Count > 0)
+			{
+				List<object> blocks = new List<object>();
+				foreach(byte[] png in images)
+					blocks.Add(new Dictionary<string, object>
+					{
+						{ "type", "image" },
+						{ "source", new Dictionary<string, object> { { "type", "base64" }, { "media_type", "image/png" }, { "data", Convert.ToBase64String(png) } } }
+					});
+				blocks.Add(new Dictionary<string, object> { { "type", "text" }, { "text", text } });
+				content = blocks;
+			}
 			Busy = true;
 			streamedtext = false;
 			Write(new Dictionary<string, object>
 			{
 				{ "type", "user" },
-				{ "message", new Dictionary<string, object> { { "role", "user" }, { "content", text } } }
+				{ "message", new Dictionary<string, object> { { "role", "user" }, { "content", content } } }
 			});
 		}
 
@@ -246,6 +260,8 @@ namespace CodeImp.DoomBuilder.ZTProject.Chat
 		internal static string Summary(string tool, Dictionary<string, object> input)
 		{
 			if(input == null) return "";
+			Dictionary<string, object> first = L(input, "questions").OfType<Dictionary<string, object>>().FirstOrDefault();
+			if(first != null) return S(first, "question") ?? "";
 			foreach(string k in new[] { "file_path", "command", "pattern", "path", "url", "description", "prompt" })
 			{
 				string v = S(input, k);
